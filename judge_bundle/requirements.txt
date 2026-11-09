@@ -1,0 +1,5 @@
+trulens-core==2.16.0
+trulens-connectors-snowflake==2.16.0
+trulens-providers-cortex==2.16.0
+trulens-otel-semconv==2.16.0
+sqlalchemy<2.1

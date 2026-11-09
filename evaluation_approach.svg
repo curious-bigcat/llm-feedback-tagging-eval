@@ -1,0 +1,243 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1180" viewBox="0 0 1600 1180" font-family="Helvetica, Arial, sans-serif">
+  <rect width="1600" height="1180" fill="#FFFFFF"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9AA8B5"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="800" y="62" text-anchor="middle" font-size="40" font-weight="700" fill="#11567F">How we chose the best AI model for tagging NHS patient feedback</text>
+  <text x="800" y="104" text-anchor="middle" font-size="21" fill="#5B6B7A">Everything runs in Snowflake (database VOC_EVAL) · repeatable · a person decides every disagreement</text>
+
+  <!-- Row labels -->
+  <g font-size="15" font-weight="700" fill="#8A97A3" letter-spacing="2">
+    <text x="20" y="480" transform="rotate(-90 20 480)" text-anchor="middle">LOGIC</text>
+    <text x="20" y="790" transform="rotate(-90 20 790)" text-anchor="middle">IN SNOWFLAKE</text>
+  </g>
+
+  <!-- ===== Column template: x, width 236 ===== -->
+  <!-- Header cards -->
+  <g>
+    <!-- 0 Data -->
+    <rect x="40" y="140" width="236" height="230" rx="18" fill="#F4F6F8" stroke="#9AA8B5" stroke-width="2.5"/>
+    <text x="158" y="182" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">The data</text>
+    <text x="158" y="218" text-anchor="middle" font-size="17" fill="#2B3A47">NHS patient feedback</text>
+    <text x="158" y="240" text-anchor="middle" font-size="17" fill="#2B3A47">survey answers</text>
+    <text x="158" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#5B6B7A">6,211</text>
+    <text x="158" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">comments · 33 sub-themes</text>
+
+    <!-- 1 Sample -->
+    <rect x="296" y="140" width="236" height="230" rx="18" fill="#EAF7FD" stroke="#29B5E8" stroke-width="2.5"/>
+    <circle cx="414" cy="176" r="22" fill="#29B5E8"/>
+    <text x="414" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">1</text>
+    <text x="414" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Pick a sample</text>
+    <text x="414" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">209</text>
+    <text x="414" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">comments, every sub-theme</text>
+
+    <!-- 2 Answer key -->
+    <rect x="552" y="140" width="236" height="230" rx="18" fill="#EAF7FD" stroke="#29B5E8" stroke-width="2.5"/>
+    <circle cx="670" cy="176" r="22" fill="#29B5E8"/>
+    <text x="670" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">2</text>
+    <text x="670" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Answer key</text>
+    <text x="670" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">72 + 137</text>
+    <text x="670" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">panel + human decided</text>
+
+    <!-- 3 Grid -->
+    <rect x="808" y="140" width="236" height="230" rx="18" fill="#EAF7FD" stroke="#29B5E8" stroke-width="2.5"/>
+    <circle cx="926" cy="176" r="22" fill="#29B5E8"/>
+    <text x="926" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">3</text>
+    <text x="926" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Test grid</text>
+    <text x="926" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">8 setups</text>
+    <text x="926" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">5,016 answers</text>
+
+    <!-- 4 Judge -->
+    <rect x="1064" y="140" width="236" height="230" rx="18" fill="#EAF7FD" stroke="#29B5E8" stroke-width="2.5"/>
+    <circle cx="1182" cy="176" r="22" fill="#29B5E8"/>
+    <text x="1182" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">4</text>
+    <text x="1182" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">AI judge</text>
+    <text x="1182" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">15,044</text>
+    <text x="1182" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">scores</text>
+
+    <!-- 5 Decision -->
+    <rect x="1320" y="140" width="236" height="230" rx="18" fill="#EAF6EF" stroke="#2E9E5B" stroke-width="3"/>
+    <circle cx="1438" cy="176" r="22" fill="#2E9E5B"/>
+    <text x="1438" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">5</text>
+    <text x="1438" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#1E6E3F">Decision</text>
+    <text x="1438" y="290" text-anchor="middle" font-size="25" font-weight="700" fill="#2E9E5B">Gemini 3.1 Pro</text>
+    <text x="1438" y="322" text-anchor="middle" font-size="25" font-weight="700" fill="#2E9E5B">+ structured prompt</text>
+  </g>
+
+  <!-- Arrows between header cards -->
+  <g stroke="#9AA8B5" stroke-width="3" marker-end="url(#arrow)">
+    <line x1="278" y1="255" x2="292" y2="255"/>
+    <line x1="534" y1="255" x2="548" y2="255"/>
+    <line x1="790" y1="255" x2="804" y2="255"/>
+    <line x1="1046" y1="255" x2="1060" y2="255"/>
+    <line x1="1302" y1="255" x2="1316" y2="255"/>
+  </g>
+
+  <!-- ===== LOGIC panels (y 390-630) ===== -->
+  <g fill="#FFFFFF" stroke="#D5DCE3" stroke-width="1.5">
+    <rect x="40" y="390" width="236" height="250" rx="14"/>
+    <rect x="296" y="390" width="236" height="250" rx="14"/>
+    <rect x="552" y="390" width="236" height="250" rx="14"/>
+    <rect x="808" y="390" width="236" height="250" rx="14"/>
+    <rect x="1064" y="390" width="236" height="250" rx="14"/>
+    <rect x="1320" y="390" width="236" height="250" rx="14"/>
+  </g>
+  <g font-size="16" fill="#2B3A47">
+    <!-- 0 -->
+    <text x="56" y="420" font-weight="700" fill="#11567F">Comments</text>
+    <text x="56" y="443">Survey answers, e.g.</text>
+    <text x="56" y="463">"What could we do</text>
+    <text x="56" y="483">better?" Text only,</text>
+    <text x="56" y="503">no labels.</text>
+    <text x="56" y="535" font-weight="700" fill="#11567F">Taxonomy</text>
+    <text x="56" y="558">10 themes, 33 sub-themes,</text>
+    <text x="56" y="578">each with a definition</text>
+    <text x="56" y="598">and example quotes.</text>
+    <!-- 1 -->
+    <text x="312" y="420">• Set aside comments that</text>
+    <text x="312" y="440">  copy rulebook examples,</text>
+    <text x="312" y="460">  and 20% of people</text>
+    <text x="312" y="488">• A cheap model rough-tags</text>
+    <text x="312" y="508">  the rest (only to sort)</text>
+    <text x="312" y="536">• Take 10 per sub-theme and</text>
+    <text x="312" y="556">  10 per impact level (1-5),</text>
+    <text x="312" y="576">  in a fixed shuffled order;</text>
+    <text x="312" y="596">  one comment counts for many</text>
+    <!-- 2 -->
+    <text x="568" y="420">• 4 AI models from different</text>
+    <text x="568" y="440">  makers tag every comment</text>
+    <text x="568" y="468">• 3 or 4 agree: accepted</text>
+    <text x="568" y="492">• 2 of 4: a person decides</text>
+    <text x="568" y="512">  (human in the loop)</text>
+    <text x="568" y="540">• 1 of 4: dropped</text>
+    <text x="568" y="568">• Sentiment: 3 of 4 agree;</text>
+    <text x="568" y="588">  impact: all within 1 point</text>
+    <!-- 3 -->
+    <text x="824" y="420">• 4 models × 2 prompts</text>
+    <text x="824" y="440">  (current, structured)</text>
+    <text x="824" y="468">• Each tags all 209</text>
+    <text x="824" y="488">  comments 3 times, to</text>
+    <text x="824" y="508">  check consistency</text>
+    <text x="824" y="536">• Automatic checks: real</text>
+    <text x="824" y="556">  quote, real sub-theme,</text>
+    <text x="824" y="576">  consistent scores;</text>
+    <text x="824" y="596">  1 retry if it fails</text>
+    <!-- 4 -->
+    <text x="1080" y="420">Scores every answer:</text>
+    <text x="1080" y="448">• Correctness: matches the</text>
+    <text x="1080" y="468">  key incl. impact? (0-3)</text>
+    <text x="1080" y="496">• Groundedness: is each</text>
+    <text x="1080" y="516">  tag supported? (0-1)</text>
+    <text x="1080" y="544">• Coherence: do the tags</text>
+    <text x="1080" y="564">  fit together? (0-1)</text>
+    <text x="1080" y="596" fill="#5B6B7A">Judge is not a tested model</text>
+    <!-- 5 -->
+    <text x="1336" y="420">Compare all 8 setups on:</text>
+    <text x="1336" y="444">• the 3 judge scores</text>
+    <text x="1336" y="468">• valid answers</text>
+    <text x="1336" y="492">• stability over repeats</text>
+    <text x="1336" y="516">• cost per comment</text>
+    <text x="1336" y="552" fill="#5B6B7A">Cheaper alternative:</text>
+    <text x="1336" y="574" fill="#5B6B7A">GPT-5.4 + structured prompt</text>
+    <text x="1336" y="596" fill="#5B6B7A">(correctness 2.60, 40% of cost)</text>
+  </g>
+
+  <!-- ===== IN SNOWFLAKE panels (y 660-920) ===== -->
+  <g fill="#F7FBFE" stroke="#BFE6F7" stroke-width="1.5">
+    <rect x="40" y="660" width="236" height="270" rx="14"/>
+    <rect x="296" y="660" width="236" height="270" rx="14"/>
+    <rect x="552" y="660" width="236" height="270" rx="14"/>
+    <rect x="808" y="660" width="236" height="270" rx="14"/>
+    <rect x="1064" y="660" width="236" height="270" rx="14"/>
+    <rect x="1320" y="660" width="236" height="270" rx="14"/>
+  </g>
+  <g font-size="16" fill="#2B3A47">
+    <!-- 0 -->
+    <text x="56" y="692">CSV files loaded into</text>
+    <text x="56" y="712">two tables:</text>
+    <text x="56" y="740" font-family="Menlo, monospace" font-size="15" fill="#11567F">COMMENTS</text>
+    <text x="56" y="762" font-family="Menlo, monospace" font-size="15" fill="#11567F">TAXONOMY</text>
+    <text x="56" y="794">A view (RULEBOOK) turns</text>
+    <text x="56" y="814">the taxonomy into the</text>
+    <text x="56" y="834">prompt text and the</text>
+    <text x="56" y="854">fixed answer format</text>
+    <!-- 1 -->
+    <text x="312" y="692">AI_COMPLETE over all</text>
+    <text x="312" y="712">comments in one batch</text>
+    <text x="312" y="732">SQL statement</text>
+    <text x="312" y="760">Fixed hashes (SHA2), so</text>
+    <text x="312" y="780">a re-run gives the same</text>
+    <text x="312" y="800">sample</text>
+    <text x="312" y="828" font-family="Menlo, monospace" font-size="15" fill="#11567F">SAMPLE_COMMENTS</text>
+    <text x="312" y="862" font-weight="700" fill="#11567F">Model</text>
+    <text x="312" y="884">Llama 3.3 70B</text>
+    <text x="312" y="906" fill="#5B6B7A">≈ 3 credits · 2 min</text>
+    <!-- 2 -->
+    <text x="568" y="692">RUN_MODEL procedure;</text>
+    <text x="568" y="712">CHECK_ANSWER checks</text>
+    <text x="568" y="732">every answer</text>
+    <text x="568" y="760">Review app (Streamlit):</text>
+    <text x="568" y="780">GV_REVIEW</text>
+    <text x="568" y="808" font-family="Menlo, monospace" font-size="15" fill="#11567F">ANSWER_KEY</text>
+    <text x="568" y="842" font-weight="700" fill="#11567F">Models (panel)</text>
+    <text x="568" y="864">Claude Haiku 4.5</text>
+    <text x="568" y="884">GPT-5.4 mini</text>
+    <text x="568" y="904">Gemini 3.8 Flash</text>
+    <text x="568" y="924">Mistral Large 2</text>
+    <!-- 3 -->
+    <text x="824" y="692">Same RUN_MODEL; one</text>
+    <text x="824" y="712">warehouse per setup, all</text>
+    <text x="824" y="732">24 runs in parallel</text>
+    <text x="824" y="752">(≈ 10 min)</text>
+    <text x="824" y="780" font-family="Menlo, monospace" font-size="15" fill="#11567F">ANSWERS</text>
+    <text x="824" y="814" font-weight="700" fill="#11567F">Models tested</text>
+    <text x="824" y="836">Mistral Large 3 (today)</text>
+    <text x="824" y="856">Claude Opus 5</text>
+    <text x="824" y="876">GPT-5.4</text>
+    <text x="824" y="896">Gemini 3.1 Pro</text>
+    <!-- 4 -->
+    <text x="1080" y="692">Snowflake Evaluations</text>
+    <text x="1080" y="712">(TruLens), app GV_TAGGER</text>
+    <text x="1080" y="740">Replays saved answers,</text>
+    <text x="1080" y="760">no new model calls;</text>
+    <text x="1080" y="780">judge prompts sent in</text>
+    <text x="1080" y="800">one parallel batch</text>
+    <text x="1080" y="828">(≈ 10 min)</text>
+    <text x="1080" y="862" font-weight="700" fill="#11567F">Judge model</text>
+    <text x="1080" y="884">Claude Sonnet 4.6</text>
+    <!-- 5 -->
+    <text x="1336" y="692">Scores read from the</text>
+    <text x="1336" y="712">Evaluations results;</text>
+    <text x="1336" y="732">costs from Snowflake</text>
+    <text x="1336" y="752">usage history</text>
+    <text x="1336" y="780">Written up in</text>
+    <text x="1336" y="800">decision_report.md</text>
+    <text x="1336" y="842" font-weight="700" fill="#11567F">Whole evaluation</text>
+    <text x="1336" y="864">≈ 160 credits</text>
+  </g>
+
+  <!-- ===== Bottom: today vs winner ===== -->
+  <rect x="40" y="955" width="1516" height="160" rx="18" fill="#F4F6F8"/>
+  <text x="70" y="998" font-size="23" font-weight="700" fill="#11567F">Today vs. winner</text>
+  <g font-size="20" fill="#2B3A47">
+    <text x="70" y="1040">Today: Mistral Large 3, current prompt</text>
+    <text x="70" y="1078">Winner: Gemini 3.1 Pro, structured prompt</text>
+    <text x="580" y="998" font-weight="700" fill="#5B6B7A">Correctness</text>
+    <text x="580" y="1040">2.32 of 3</text>
+    <text x="580" y="1078" font-weight="700" fill="#2E9E5B">2.65 of 3</text>
+    <text x="800" y="998" font-weight="700" fill="#5B6B7A">Tags supported</text>
+    <text x="800" y="1040">63%</text>
+    <text x="800" y="1078" font-weight="700" fill="#2E9E5B">84%</text>
+    <text x="1030" y="998" font-weight="700" fill="#5B6B7A">Valid answers</text>
+    <text x="1030" y="1040">173 of 209</text>
+    <text x="1030" y="1078" font-weight="700" fill="#2E9E5B">209 of 209</text>
+    <text x="1270" y="998" font-weight="700" fill="#5B6B7A">Cost per 1,000 comments</text>
+    <text x="1270" y="1040">5 credits</text>
+    <text x="1270" y="1078" font-weight="700" fill="#2E9E5B">20 credits</text>
+  </g>
+  <text x="800" y="1152" text-anchor="middle" font-size="16" fill="#8A97A3">Panel models (step 2) and judge (step 4) are different from the 4 models being tested (step 3)</text>
+</svg>

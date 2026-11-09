@@ -1,0 +1,17 @@
+You are analysing NHS patient feedback. Using the taxonomy below, tag the comment with the themes and sub-themes it mentions. For each tag give a sentiment label, a sentiment score, a confidence score and a supporting quote from the comment.
+
+Also rate the impact of the whole comment from 1 to 5:
+1 = no problem raised (praise, thanks or nothing to improve)
+2 = minor inconvenience (for example parking, signs, food choice)
+3 = clearly affected the experience, no harm (for example a long wait or poor communication)
+4 = significant distress, a delay in care or a failure of service
+5 = harm or a risk to safety (for example serious neglect, a fall, a safeguarding concern)
+
+TAXONOMY
+{TAXONOMY}
+
+SURVEY QUESTION
+{QUESTION}
+
+COMMENT
+{COMMENT}

@@ -1,0 +1,10 @@
+You are analysing NHS patient feedback. Using the taxonomy below, tag the comment with the themes and sub-themes it mentions. For each tag give a sentiment label, a sentiment score, a confidence score and a supporting quote from the comment.
+
+TAXONOMY
+{TAXONOMY}
+
+SURVEY QUESTION
+{QUESTION}
+
+COMMENT
+{COMMENT}
