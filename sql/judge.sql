@@ -3,12 +3,15 @@
 -- ANSWERS (no model calls), and has the judge (J01 in MODELS) score them: tag_groundedness and tag_coherence (ours,
 -- client-side) and correctness against ANSWER_KEY - tags, sentiment and impact (built-in, server-side).
 -- Uses Snowflake's TruLens build (2.7).
--- LIMIT > 0 judges only that many comments (fixed hash pick), for a quick test; 0 = all 196.
+-- LIMIT > 0 judges only that many comments (fixed hash pick), for a quick test; 0 = all.
+-- SOURCE: SAMPLE_COMMENTS (default) or FRESH_COMMENTS (step 10a: replays run 'C09_fresh_r1' etc.; fresh comments have
+-- no answer key, so only tag_groundedness and tag_coherence are scored, not correctness).
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
 
 DROP PROCEDURE IF EXISTS JUDGE_RUN(STRING, STRING, INT, INT);
-CREATE OR REPLACE PROCEDURE JUDGE_RUN(P_MODEL_ID STRING, P_REPEAT INT, P_LIMIT INT)
+DROP PROCEDURE IF EXISTS JUDGE_RUN(STRING, INT, INT);
+CREATE OR REPLACE PROCEDURE JUDGE_RUN(P_MODEL_ID STRING, P_REPEAT INT, P_LIMIT INT, P_SOURCE STRING DEFAULT 'SAMPLE_COMMENTS')
 RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
@@ -56,27 +59,37 @@ def patch_record_count(count):
             cls._ingest_spans_from_stage = staticmethod(ingest)
 
 
-def run(session, model_id, repeat, limit):
+def run(session, model_id, repeat, limit, source="SAMPLE_COMMENTS"):
+    if source not in ("SAMPLE_COMMENTS", "FRESH_COMMENTS"):
+        raise ValueError(f"unexpected source: {source}")
+    fresh = source == "FRESH_COMMENTS"
     session.use_database("VOC_EVAL")
     session.use_schema("HARNESS")
     judge = session.sql(f"SELECT MODEL FROM {DB}.MODELS WHERE ROLE = 'judge'").collect()[0][0]
     m = session.sql(f"SELECT MODEL, PROMPT FROM {DB}.MODELS WHERE MODEL_ID = ?", params=[model_id]).collect()[0]
     version = f"{m['MODEL']}__{m['PROMPT']}"
-    run_id = f"{model_id}_r{repeat}"               # the grid run whose saved answers are replayed
+    run_id = f"{model_id}{'_fresh' if fresh else ''}_r{repeat}"   # the run whose saved answers are replayed
     run_name = run_id + (f"_test{limit}" if limit else "")
 
-    # Dataset: the comment, its id, and the answer key as ground truth.
-    df = session.sql(f"""
-        SELECT c.COMMENT_ID, c.COMMENT_TEXT,
-               OBJECT_CONSTRUCT('tags', k.TAGS, 'sentiment', k.SENTIMENT, 'impact', k.IMPACT)::STRING AS GROUND_TRUTH
-        FROM {DB}.SAMPLE_COMMENTS c JOIN {DB}.ANSWER_KEY k USING (COMMENT_ID)
-        {"QUALIFY ROW_NUMBER() OVER (ORDER BY SHA2('nhs_eval_v2|judge_test|' || c.COMMENT_ID)) <= " + str(int(limit))
-         if limit else ""}
-        ORDER BY c.COMMENT_ID""").to_pandas()
-    spec = {"RECORD_ROOT.INPUT": "COMMENT_TEXT", "comment_id": "COMMENT_ID",
-            "RECORD_ROOT.GROUND_TRUTH_OUTPUT": "GROUND_TRUTH"}
+    # Dataset: the comment, its id, and (sample only) the answer key as ground truth.
+    pick = ("QUALIFY ROW_NUMBER() OVER (ORDER BY SHA2('nhs_eval_v2|judge_test|' || c.COMMENT_ID)) <= " + str(int(limit))
+            if limit else "")
+    if fresh:
+        df = session.sql(f"SELECT c.COMMENT_ID, c.COMMENT_TEXT FROM {DB}.FRESH_COMMENTS c {pick} "
+                         "ORDER BY c.COMMENT_ID").to_pandas()
+        spec = {"RECORD_ROOT.INPUT": "COMMENT_TEXT", "comment_id": "COMMENT_ID"}
+    else:
+        df = session.sql(f"""
+            SELECT c.COMMENT_ID, c.COMMENT_TEXT,
+                   OBJECT_CONSTRUCT('tags', k.TAGS, 'sentiment', k.SENTIMENT, 'impact', k.IMPACT)::STRING AS GROUND_TRUTH
+            FROM {DB}.SAMPLE_COMMENTS c JOIN {DB}.ANSWER_KEY k USING (COMMENT_ID)
+            {pick}
+            ORDER BY c.COMMENT_ID""").to_pandas()
+        spec = {"RECORD_ROOT.INPUT": "COMMENT_TEXT", "comment_id": "COMMENT_ID",
+                "RECORD_ROOT.GROUND_TRUTH_OUTPUT": "GROUND_TRUTH"}
+    label = "FRESH" if fresh else "SAMPLE"
 
-    app = GVTagger(session, run_id)
+    app = GVTagger(session, run_id, source)
     # The 3 repeats of a setup start together and race to register the same app version ("already exists");
     # on a retry the version is found and reused. One connector only: TruLens refuses a second one in a session.
     connector = SnowflakeConnector(snowpark_session=session)
@@ -90,9 +103,9 @@ def run(session, model_id, repeat, limit):
                 raise
             time.sleep(5 + 5 * attempt)
     tr_run = tru_app.add_run(RunConfig(
-        run_name=run_name, dataset_name=f"SAMPLE_{len(df)}", source_type="DATAFRAME",
-        dataset_spec=spec, label="SAMPLE", llm_judge_name=judge,
-        description=f"{model_id} {version}, repeat {repeat}"))
+        run_name=run_name, dataset_name=f"{label}_{len(df)}", source_type="DATAFRAME",
+        dataset_spec=spec, label=label, llm_judge_name=judge,
+        description=f"{model_id} {version}, repeat {repeat}" + (", fresh comments" if fresh else "")))
 
     # Replay: no model calls.
     t0 = time.time()
@@ -106,9 +119,11 @@ def run(session, model_id, repeat, limit):
     cache = prefetch_verdicts(session, judge, app.judge_rows(df["COMMENT_ID"]))
     t2 = time.time()
     # Tag metrics first: compute_metrics ends with a blocking upload of every score. Only then start correctness,
-    # because once it starts Snowflake rejects further uploads for the run ("Computation Started").
+    # because once it starts Snowflake rejects further uploads for the run ("Computation Started"). Fresh comments
+    # have no answer key, so no correctness.
     result = tr_run.compute_metrics(metrics=tag_metrics(session, cache))
-    result += " / " + tr_run.compute_metrics(metrics=["correctness"])
+    if not fresh:
+        result += " / " + tr_run.compute_metrics(metrics=["correctness"])
     return json.dumps({"run": run_name, "records": len(df), "invocation": status, "replay_s": round(t1 - t0),
                        "judge_batch_s": round(t2 - t1), "verdicts": len(cache),
                        "metrics_s": round(time.time() - t2), "compute_metrics": result})

@@ -125,28 +125,38 @@ CREATE TABLE IF NOT EXISTS REVIEW_QUEUE (
   CREATED_AT  TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- RUN_MODEL(model id, repeat): runs one model over every SAMPLE_COMMENTS row, e.g. CALL RUN_MODEL('P01', 1).
+-- RUN_MODEL(model id, repeat [, source]): runs one model over every comment in the source table, e.g.
+-- CALL RUN_MODEL('P01', 1). Source is SAMPLE_COMMENTS (default; run id 'P01_r1'), FRESH_COMMENTS (step 10a, built
+-- by fresh.sql; run id 'C09_fresh_r1') or REPORT_COMMENTS (aggregation step A1, built by report.sql; 'C09_report_r1').
 --   1. one AI_COMPLETE call per comment in a single statement (Snowflake runs them in parallel), with the model's
 --      prompt filled in and the fixed answer format; each answer is saved with its CHECK_ANSWER result
 --   2. failed answers are asked once more; the retry replaces the first answer
 --   3. tested models' answers that still fail go to REVIEW_QUEUE (panel disagreements are reviewed instead)
 -- Re-running a run replaces its rows. The model name must be a literal in AI_COMPLETE, so the call is built as
--- text; the name only ever comes from MODELS.
-CREATE OR REPLACE PROCEDURE RUN_MODEL(P_MODEL_ID STRING, P_REPEAT NUMBER)
+-- text; the name only ever comes from MODELS, and the source must be one of the three tables above.
+DROP PROCEDURE IF EXISTS RUN_MODEL(STRING, NUMBER);
+CREATE OR REPLACE PROCEDURE RUN_MODEL(P_MODEL_ID STRING, P_REPEAT NUMBER, P_SOURCE STRING DEFAULT 'SAMPLE_COMMENTS')
 RETURNS STRING
 LANGUAGE SQL
 EXECUTE AS CALLER
 AS
 $$
 DECLARE
-  v_run_id STRING DEFAULT P_MODEL_ID || '_r' || P_REPEAT;
-  v_tmp    STRING DEFAULT 'T_RETRY_' || REGEXP_REPLACE(P_MODEL_ID || '_' || P_REPEAT, '[^A-Za-z0-9_]', '');
+  v_run_id STRING DEFAULT P_MODEL_ID || DECODE(P_SOURCE, 'FRESH_COMMENTS', '_fresh', 'REPORT_COMMENTS', '_report', '')
+                          || '_r' || P_REPEAT;
+  v_tmp    STRING DEFAULT 'T_RETRY_' || REGEXP_REPLACE(P_MODEL_ID
+                          || DECODE(P_SOURCE, 'FRESH_COMMENTS', '_fresh', 'REPORT_COMMENTS', '_report', '')
+                          || '_' || P_REPEAT, '[^A-Za-z0-9_]', '');
   v_model  STRING;
   v_prompt STRING;
   v_role   STRING;
   v_call   STRING;
-  bad_input EXCEPTION (-20001, 'Unknown model id, or a model with no prompt');
+  bad_input  EXCEPTION (-20001, 'Unknown model id, or a model with no prompt');
+  bad_source EXCEPTION (-20002, 'Source must be SAMPLE_COMMENTS, FRESH_COMMENTS or REPORT_COMMENTS');
 BEGIN
+  IF (P_SOURCE NOT IN ('SAMPLE_COMMENTS', 'FRESH_COMMENTS', 'REPORT_COMMENTS')) THEN
+    RAISE bad_source;
+  END IF;
   SELECT MODEL, PROMPT, ROLE INTO :v_model, :v_prompt, :v_role FROM MODELS WHERE MODEL_ID = :P_MODEL_ID;
   IF (v_model IS NULL OR v_prompt IS NULL) THEN
     RAISE bad_input;
@@ -161,13 +171,13 @@ BEGIN
                model_parameters => {''temperature'': 0, ''max_tokens'': 4096},
                response_format => r.RESPONSE_FORMAT, show_details => TRUE)';
 
-  -- Attempt 1: every sample comment.
+  -- Attempt 1: every comment in the source.
   EXECUTE IMMEDIATE '
     INSERT INTO ANSWERS (RUN_ID, MODEL_ID, MODEL, PROMPT, REPEAT_NO, COMMENT_ID, ATTEMPT, ANSWER, PROBLEMS,
                          INPUT_TOKENS, OUTPUT_TOKENS)
     WITH a AS (
       SELECT c.COMMENT_ID, c.COMMENT_TEXT, r.ALLOWED_PAIRS, ' || v_call || ' AS R
-      FROM SAMPLE_COMMENTS c CROSS JOIN RULEBOOK r JOIN PROMPTS p ON p.PROMPT = ?)
+      FROM ' || P_SOURCE || ' c CROSS JOIN RULEBOOK r JOIN PROMPTS p ON p.PROMPT = ?)
     SELECT ?, ?, ?, ?, ?, COMMENT_ID, 1, R:structured_output[0]:raw_message,
            CHECK_ANSWER(R:structured_output[0]:raw_message, COMMENT_TEXT, ALLOWED_PAIRS),
            R:usage:prompt_tokens, R:usage:completion_tokens
@@ -179,7 +189,7 @@ BEGIN
     CREATE OR REPLACE TEMPORARY TABLE ' || v_tmp || ' AS
     WITH a AS (
       SELECT c.COMMENT_ID, c.COMMENT_TEXT, r.ALLOWED_PAIRS, ' || v_call || ' AS R
-      FROM SAMPLE_COMMENTS c CROSS JOIN RULEBOOK r JOIN PROMPTS p ON p.PROMPT = ?
+      FROM ' || P_SOURCE || ' c CROSS JOIN RULEBOOK r JOIN PROMPTS p ON p.PROMPT = ?
       JOIN ANSWERS f ON f.COMMENT_ID = c.COMMENT_ID AND f.RUN_ID = ? AND ARRAY_SIZE(f.PROBLEMS) > 0)
     SELECT COMMENT_ID, R:structured_output[0]:raw_message AS ANSWER,
            CHECK_ANSWER(R:structured_output[0]:raw_message, COMMENT_TEXT, ALLOWED_PAIRS) AS PROBLEMS,

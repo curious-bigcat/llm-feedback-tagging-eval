@@ -147,8 +147,70 @@ Usage history fills in with a delay of up to a few hours, so the last hour's fig
 
 1. **Decide:** C09 (best quality and consistency), C11 (lower cost) or C10 (prompt-only change at today's cost).
 2. **Quick win either way:** move today's setup to the v3 prompt; it is a prompt change only.
-3. Optionally confirm v3 on fresh comments (the 20% of people kept aside) and run the 30-row answer-key audit.
-4. **Then aggregation:** with better tags, resume the paused aggregation test (`legacy/aggregation/`): counts from
-   SQL with each comment counted once, and summaries by map-reduce or `AI_AGG` rather than one big prompt.
+3. Fresh-comment check: done (step 10a, the winner holds on 100 new comments). Answer-key audit: queued (step 10b).
+4. Aggregation: done for one service (section 7). Next, the scale test and all services (section 7.4).
 5. Put the winner into production with the same answer format and checks, failed answers to the review queue, and a
    monthly check of about 30 new comments with the same precision/recall/F1 views.
+
+---
+
+## 7. Aggregation: building the report from the tags
+
+**Question:** once comments are tagged, how should the organisation report be built so its numbers are right and its
+text is accurate, complete and repeatable?
+
+**Recommendation: numbers from a semantic view, text by map-reduce, on the winner's tags.**
+- **Numbers** (comments per theme and sub-theme, % negative / positive, impact) come from the semantic view
+  `REPORT_SV`: exact SQL counts, each comment counted once per theme, the same every run. The AI never counts.
+- **Text** by map-reduce: one Gemini 3.1 Pro call per theme with only that theme's comments, then one short call for
+  the overview. Best on faithfulness (0.98), coverage of key sub-themes (0.85) and consistency (0.74) of the methods
+  tested.
+- Example output: `reports/patient_transport_report.md`.
+
+### 7.1 How it was tested
+
+500 patient transport comments (one service, like one report), tagged by the winner (C09) and by today's setup (C01).
+Three ways of writing the text, same instruction (`prompts/summary_v2.txt`) and same writer where one can be chosen,
+3 runs each: 18 reports. Scored by SQL (numbers in text, quotes word for word) and by the judge, Claude Sonnet 4.6
+(faithfulness: share of claims the comments support; coverage: share of the top 3 sub-themes mentioned; consistency:
+share of main points made in all 3 runs).
+
+### 7.2 Results
+
+| Tags | Method | Faithful | Coverage | Same points in all 3 runs | Quotes real | Writer tokens in / out per report |
+|---|---|---|---|---|---|---|
+| Winner | **map_reduce** | **0.98** | **0.85** | **0.74** | 99% | 17k / 12k |
+| Winner | big_prompt | 0.91 | 0.78 | 0.54 | 100% | 15k / 3k |
+| Winner | ai_agg | 0.94 | 0.67 | 0.49 | 87% | not reported |
+| Today | map_reduce | 0.89 | 0.78 | 0.74 | 100% | 23k / 12k |
+| Today | big_prompt | 0.84 | 0.68 | 0.62 | 100% | 16k / 3k |
+| Today | ai_agg | 0.86 | 0.69 | 0.49 | 93% | not reported |
+
+1. **Wrong tags distort the report before any text is written.** On the same 500 comments, today's setup gives 1,050
+   tags (2.1 per comment) against the winner's 669 (1.3). Every theme looks bigger; Communication shows 60 comments
+   instead of 20. Better tags also give more faithful text with every method (0.89-0.98 vs 0.84-0.89).
+2. **Map-reduce writes the best text.** Each call sees only one theme's comments, so it has room to cover each theme
+   fully. It uses about 4 times the writer output tokens of the big prompt.
+3. **The big prompt did not fail at 500 comments** (about 15k input tokens) but wrote short sections and missed more
+   key sub-themes. Its breaking point at annual scale is untested (section 7.4).
+4. **`AI_AGG` misses the most key sub-themes, repeats least and changes some quotes** (7-13% not word for word), which
+   breaks the evidence rule.
+5. **No method wrote numbers into the text.** Most unsupported claims are about how common something is ("many" for
+   what two or three comments say), not invented facts.
+6. **The overview is the least repeatable part with every method** (0.36-0.67 of points in all 3 runs).
+
+### 7.3 Limitations and fixes to try
+
+- **Overview:** give the writer the top themes and sub-themes by count from `REPORT_SV`, so it always leads with the
+  same points.
+- **"Many" / "some":** pass each theme's sub-theme counts to the writer as hidden context (not to be written), or
+  replace frequency words with the SQL counts in the final layout.
+- **One service, 500 comments, one writer model.** The scale test and other services are next (7.4).
+- **Judge:** one model (Claude Sonnet 4.6); 2 of 218 sections not scored.
+
+### 7.4 Expanding to all services and annual reports
+
+See the README section "Expanding beyond Patient Transport". In short: tag every comment once with the winner and
+keep the tags (about 120 credits for all 6,211 comments; then only new comments each month), add service and month
+to the semantic view, and write reports by map-reduce at each level: service x theme sections, then organisation
+theme sections from the service sections, then the overview. No call ever needs a year of raw comments.

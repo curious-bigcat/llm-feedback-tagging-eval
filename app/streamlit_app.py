@@ -1,8 +1,11 @@
 """Answer-key review.
 
-Ten comments per page: check the panel's suggested answer for each (tags, sentiment, impact), then save the page.
-Saving sets ANSWER_KEY.DECIDED_BY = human (with who and when) and closes each REVIEW_QUEUE item. Cards that are
-not complete, or are marked "Skip for now", stay open and come back on a later page.
+Ten comments per page, then save the page. Two kinds of work:
+- Panel disagreements: check the panel's suggested answer for each (tags, sentiment, impact). Saving sets
+  ANSWER_KEY.DECIDED_BY = human (with who and when) and closes each REVIEW_QUEUE item.
+- Blind audit (step 10b): the comment only, no suggestion; tag it fresh. Saved in REVIEW_QUEUE only, ANSWER_KEY is
+  not changed, so the person's answer can be compared with the panel's.
+Cards that are not complete, or are marked "Skip for now", stay open and come back on a later page.
 """
 import json
 
@@ -14,6 +17,7 @@ SENTIMENTS = ["Positive", "Neutral", "Negative"]
 IMPACTS = [1, 2, 3, 4, 5]
 IMPACT_HELP = ("1 no problem raised · 2 minor inconvenience · 3 affected the experience, no harm · "
                "4 significant distress, delay or service failure · 5 harm or risk to safety")
+MODES = {"Panel disagreements": "panel_split", "Blind audit": "audit"}
 
 st.set_page_config(page_title="Answer key review", page_icon=":material/fact_check:", layout="wide")
 
@@ -26,15 +30,15 @@ def all_pairs() -> list[str]:
     return [r["P"] for r in rows]
 
 
-def next_page(skipped: list[int]):
-    """The next open panel splits (up to PAGE_SIZE), plus progress counts. Not cached: it changes after every save."""
+def next_page(reason: str, skipped: list[int]):
+    """The next open items of this kind (up to PAGE_SIZE), plus progress counts. Not cached: it changes after every save."""
     counts = session.sql(f"""SELECT COUNT(*) AS TOTAL, COUNT_IF(STATUS = 'done') AS DONE
-                             FROM {DB}.REVIEW_QUEUE WHERE REASON = 'panel_split'""").collect()[0]
+                             FROM {DB}.REVIEW_QUEUE WHERE REASON = ?""", params=[reason]).collect()[0]
     rows = session.sql(f"""
         SELECT q.ITEM_ID, q.COMMENT_ID, q.DETAILS::STRING AS DETAILS, c.QUESTION, c.COMMENT_TEXT
         FROM {DB}.REVIEW_QUEUE q JOIN {DB}.SAMPLE_COMMENTS c USING (COMMENT_ID)
-        WHERE q.REASON = 'panel_split' AND q.STATUS = 'open'
-        ORDER BY q.ITEM_ID""").collect()
+        WHERE q.REASON = ? AND q.STATUS = 'open'
+        ORDER BY q.ITEM_ID""", params=[reason]).collect()
     todo = [r for r in rows if r["ITEM_ID"] not in skipped] or rows
     return todo[:PAGE_SIZE], counts["TOTAL"], counts["DONE"]
 
@@ -51,19 +55,20 @@ def reviewer() -> str:
     return name or session.sql("SELECT CURRENT_USER()").collect()[0][0]
 
 
-def save(item, tags: list[str], sentiment: str, impact: int, who: str):
+def save(item, tags: list[str], sentiment: str, impact: int, who: str, audit: bool):
     tag_list = [{"theme": t.split(" > ")[0], "sub_theme": label(t)} for t in tags]
-    session.sql(f"""UPDATE {DB}.ANSWER_KEY SET TAGS = PARSE_JSON(?)::ARRAY, SENTIMENT = ?, IMPACT = ?, DECIDED_BY = 'human',
-                    REVIEWED_BY = ?, REVIEWED_AT = CURRENT_TIMESTAMP() WHERE COMMENT_ID = ?""",
-                params=[json.dumps(tag_list), sentiment, int(impact), who, item["COMMENT_ID"]]).collect()
+    if not audit:
+        session.sql(f"""UPDATE {DB}.ANSWER_KEY SET TAGS = PARSE_JSON(?)::ARRAY, SENTIMENT = ?, IMPACT = ?,
+                        DECIDED_BY = 'human', REVIEWED_BY = ?, REVIEWED_AT = CURRENT_TIMESTAMP() WHERE COMMENT_ID = ?""",
+                    params=[json.dumps(tag_list), sentiment, int(impact), who, item["COMMENT_ID"]]).collect()
     session.sql(f"""UPDATE {DB}.REVIEW_QUEUE SET STATUS = 'done', DECISION = PARSE_JSON(?), REVIEWED_BY = ?,
                     REVIEWED_AT = CURRENT_TIMESTAMP() WHERE ITEM_ID = ?""",
                 params=[json.dumps({"tags": tag_list, "sentiment": sentiment, "impact": int(impact)}), who,
                         int(item["ITEM_ID"])]).collect()
 
 
-def card(n: int, item) -> dict:
-    """One comment: shows the panel's suggestion and returns the reviewer's choice."""
+def card(n: int, item, audit: bool) -> dict:
+    """One comment: shows the panel's suggestion (none in audit mode) and returns the reviewer's choice."""
     iid = int(item["ITEM_ID"])
     d = json.loads(item["DETAILS"])
     agreed = [f"{t['theme']} > {t['sub_theme']}" for t in d.get("accepted") or []]
@@ -76,6 +81,18 @@ def card(n: int, item) -> dict:
         st.markdown(f"**{item['COMMENT_TEXT']}**")
 
         left, right = st.columns([3, 2])
+        if audit:
+            with left:
+                tags = st.multiselect("Tags: the points this comment clearly makes", all_pairs(),
+                                      format_func=label, key=f"t_{iid}")
+            with right:
+                sentiment = st.segmented_control("Sentiment", SENTIMENTS, key=f"s_{iid}")
+                impact = st.segmented_control("Impact", IMPACTS, key=f"i_{iid}", help=IMPACT_HELP)
+            if len(tags) > 3:
+                st.warning(f"{len(tags)} tags selected. Most comments make 1-2 points.", icon=":material/warning:")
+            skip = st.checkbox("Skip for now", key=f"k_{iid}")
+            return {"item": item, "tags": tags, "sentiment": sentiment, "impact": impact, "skip": skip}
+
         with left:
             tags = st.multiselect("Tags (agreed by 3+ models are pre-selected)", all_pairs(), default=agreed,
                                   format_func=label, key=f"t_{iid}")
@@ -108,17 +125,25 @@ def card(n: int, item) -> dict:
 st.session_state.setdefault("skipped", [])
 
 st.title("Answer key review")
-page, total, done = next_page(st.session_state.skipped)
+open_audit = session.sql(f"SELECT COUNT(*) FROM {DB}.REVIEW_QUEUE WHERE REASON = 'audit'").collect()[0][0]
+mode = (st.segmented_control("Work", list(MODES), default="Blind audit", key="mode") or "Blind audit"
+        if open_audit else "Panel disagreements")
+audit = MODES[mode] == "audit"
+if audit:
+    st.info("Blind audit: tag each comment from scratch. The panel's answer is hidden and the answer key is not "
+            "changed; your answers are compared with the panel's afterwards.", icon=":material/visibility_off:")
+page, total, done = next_page(MODES[mode], st.session_state.skipped)
 st.progress(done / total if total else 1.0, text=f"{done} of {total} reviewed")
 if st.session_state.pop("saved_msg", None):
     st.toast(st.session_state.pop("saved_text", "Saved"), icon=":material/check:")
 
 if not page:
-    st.success("All done. The answer key is complete.", icon=":material/task_alt:")
+    st.success("All done. The audit is complete." if audit else "All done. The answer key is complete.",
+               icon=":material/task_alt:")
     st.stop()
 
 st.caption(f"{len(page)} comments on this page. Impact: {IMPACT_HELP}")
-choices = [card(n, item) for n, item in enumerate(page, start=1)]
+choices = [card(n, item, audit) for n, item in enumerate(page, start=1)]
 
 allowed = set(all_pairs())
 ready = [c for c in choices if not c["skip"] and c["tags"] and all(t in allowed for t in c["tags"])
@@ -132,7 +157,7 @@ if st.button(f"Save this page ({len(ready)})", type="primary", icon=":material/c
              disabled=not ready and not skipping):
     who = reviewer()
     for c in ready:
-        save(c["item"], c["tags"], c["sentiment"], c["impact"], who)
+        save(c["item"], c["tags"], c["sentiment"], c["impact"], who, audit)
     st.session_state.skipped += [int(c["item"]["ITEM_ID"]) for c in skipping]
     st.session_state.saved_msg = True
     st.session_state.saved_text = f"Saved {len(ready)}" + (f", skipped {len(skipping)}" if skipping else "")

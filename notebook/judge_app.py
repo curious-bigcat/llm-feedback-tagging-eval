@@ -148,12 +148,15 @@ def tag_metrics(session: Session, cache: dict) -> list:
 
 
 class GVTagger:
-    """One grid run (setup + repeat), replaying its saved answers one comment at a time."""
+    """One run (setup + repeat), replaying its saved answers one comment at a time. SOURCE is the comment table the
+    run used: SAMPLE_COMMENTS or FRESH_COMMENTS."""
 
-    def __init__(self, session: Session, run_id: str):
+    def __init__(self, session: Session, run_id: str, source: str = "SAMPLE_COMMENTS"):
+        if source not in ("SAMPLE_COMMENTS", "FRESH_COMMENTS"):
+            raise ValueError(f"unexpected source: {source}")
         rows = session.sql(f"""
             SELECT a.COMMENT_ID, a.ANSWER::STRING AS A, c.COMMENT_TEXT, c.QUESTION
-            FROM {DB}.ANSWERS a JOIN {DB}.SAMPLE_COMMENTS c USING (COMMENT_ID)
+            FROM {DB}.ANSWERS a JOIN {DB}.{source} c USING (COMMENT_ID)
             WHERE a.RUN_ID = ?""", params=[run_id]).collect()
         self.answers = {r["COMMENT_ID"]: json.loads(r["A"]) if r["A"] else {} for r in rows}
         self.questions = {r["COMMENT_ID"]: r["QUESTION"] or "" for r in rows}
