@@ -1,20 +1,21 @@
 """Answer-key review.
 
-One comment at a time: check the panel's suggested answer (tags, sentiment, impact) and approve it.
-Approving sets ANSWER_KEY.DECIDED_BY = human (with who and when) and closes the
-REVIEW_QUEUE item.
+Ten comments per page: check the panel's suggested answer for each (tags, sentiment, impact), then save the page.
+Saving sets ANSWER_KEY.DECIDED_BY = human (with who and when) and closes each REVIEW_QUEUE item. Cards that are
+not complete, or are marked "Skip for now", stay open and come back on a later page.
 """
 import json
 
 import streamlit as st
 
 DB = "VOC_EVAL.HARNESS"
+PAGE_SIZE = 10
 SENTIMENTS = ["Positive", "Neutral", "Negative"]
 IMPACTS = [1, 2, 3, 4, 5]
 IMPACT_HELP = ("1 no problem raised · 2 minor inconvenience · 3 affected the experience, no harm · "
                "4 significant distress, delay or service failure · 5 harm or risk to safety")
 
-st.set_page_config(page_title="Answer key review", page_icon=":material/fact_check:")
+st.set_page_config(page_title="Answer key review", page_icon=":material/fact_check:", layout="wide")
 
 session = st.connection("snowflake").session()
 
@@ -25,8 +26,8 @@ def all_pairs() -> list[str]:
     return [r["P"] for r in rows]
 
 
-def next_item(skipped: list[int]):
-    """The next open panel split, plus progress counts. Not cached: it changes after every save."""
+def next_page(skipped: list[int]):
+    """The next open panel splits (up to PAGE_SIZE), plus progress counts. Not cached: it changes after every save."""
     counts = session.sql(f"""SELECT COUNT(*) AS TOTAL, COUNT_IF(STATUS = 'done') AS DONE
                              FROM {DB}.REVIEW_QUEUE WHERE REASON = 'panel_split'""").collect()[0]
     rows = session.sql(f"""
@@ -35,7 +36,7 @@ def next_item(skipped: list[int]):
         WHERE q.REASON = 'panel_split' AND q.STATUS = 'open'
         ORDER BY q.ITEM_ID""").collect()
     todo = [r for r in rows if r["ITEM_ID"] not in skipped] or rows
-    return (todo[0] if todo else None), counts["TOTAL"], counts["DONE"]
+    return todo[:PAGE_SIZE], counts["TOTAL"], counts["DONE"]
 
 
 def label(p: str) -> str:
@@ -50,14 +51,8 @@ def reviewer() -> str:
     return name or session.sql("SELECT CURRENT_USER()").collect()[0][0]
 
 
-def approve(item, tags: list[str], sentiment: str, impact: int):
-    allowed = set(all_pairs())
-    if (not tags or any(t not in allowed for t in tags) or sentiment not in SENTIMENTS
-            or impact not in IMPACTS):  # server-side check
-        st.error("Choose at least one valid tag, a sentiment and an impact.")
-        return False
+def save(item, tags: list[str], sentiment: str, impact: int, who: str):
     tag_list = [{"theme": t.split(" > ")[0], "sub_theme": label(t)} for t in tags]
-    who = reviewer()
     session.sql(f"""UPDATE {DB}.ANSWER_KEY SET TAGS = PARSE_JSON(?)::ARRAY, SENTIMENT = ?, IMPACT = ?, DECIDED_BY = 'human',
                     REVIEWED_BY = ?, REVIEWED_AT = CURRENT_TIMESTAMP() WHERE COMMENT_ID = ?""",
                 params=[json.dumps(tag_list), sentiment, int(impact), who, item["COMMENT_ID"]]).collect()
@@ -65,72 +60,80 @@ def approve(item, tags: list[str], sentiment: str, impact: int):
                     REVIEWED_AT = CURRENT_TIMESTAMP() WHERE ITEM_ID = ?""",
                 params=[json.dumps({"tags": tag_list, "sentiment": sentiment, "impact": int(impact)}), who,
                         int(item["ITEM_ID"])]).collect()
-    return True
+
+
+def card(n: int, item) -> dict:
+    """One comment: shows the panel's suggestion and returns the reviewer's choice."""
+    iid = int(item["ITEM_ID"])
+    d = json.loads(item["DETAILS"])
+    agreed = [f"{t['theme']} > {t['sub_theme']}" for t in d.get("accepted") or []]
+    maybe = [f"{v['theme']} > {v['sub_theme']}" for v in d.get("all_votes") or [] if v["status"] == "split"]
+    panel_sentiment = d.get("sentiment") if d.get("sentiment") in SENTIMENTS else None
+    panel_impact = int(d["impact"]) if d.get("impact") in IMPACTS else None
+
+    with st.container(border=True):
+        st.caption(f"{n}. {item['QUESTION']}")
+        st.markdown(f"**{item['COMMENT_TEXT']}**")
+
+        left, right = st.columns([3, 2])
+        with left:
+            tags = st.multiselect("Tags (agreed by 3+ models are pre-selected)", all_pairs(), default=agreed,
+                                  format_func=label, key=f"t_{iid}")
+            if maybe:
+                st.caption("Also suggested by 2 of 4 models: add any that the comment clearly makes a point about")
+                with st.container(horizontal=True):
+                    for p in maybe:
+                        if st.checkbox(label(p), key=f"m_{iid}_{p}"):
+                            tags = list(dict.fromkeys(tags + [p]))
+            if not agreed:
+                st.caption("No tag was agreed by 3 or more models.")
+        with right:
+            sentiment = st.segmented_control("Sentiment", SENTIMENTS, default=panel_sentiment, key=f"s_{iid}")
+            if panel_sentiment is None:
+                st.caption("Panel did not agree: choose one.")
+            impact = st.segmented_control("Impact", IMPACTS, default=panel_impact, key=f"i_{iid}", help=IMPACT_HELP)
+            if panel_impact is None:
+                said = ", ".join(str(v) for v in (d.get("impact_votes") or {}).values()) or "no answer"
+                st.caption(f"Panel said {said}: choose one.")
+
+        if d.get("too_many_tags"):
+            st.info("The panel agreed on 4 or more tags. Keep only the points the comment clearly makes.",
+                    icon=":material/info:")
+        if len(tags) > 3:
+            st.warning(f"{len(tags)} tags selected. Most comments make 1-2 points.", icon=":material/warning:")
+        skip = st.checkbox("Skip for now", key=f"k_{iid}")
+    return {"item": item, "tags": tags, "sentiment": sentiment, "impact": impact, "skip": skip}
 
 
 st.session_state.setdefault("skipped", [])
 
 st.title("Answer key review")
-item, total, done = next_item(st.session_state.skipped)
+page, total, done = next_page(st.session_state.skipped)
 st.progress(done / total if total else 1.0, text=f"{done} of {total} reviewed")
+if st.session_state.pop("saved_msg", None):
+    st.toast(st.session_state.pop("saved_text", "Saved"), icon=":material/check:")
 
-if item is None:
+if not page:
     st.success("All done. The answer key is complete.", icon=":material/task_alt:")
     st.stop()
 
-d = json.loads(item["DETAILS"])
-agreed = [f"{t['theme']} > {t['sub_theme']}" for t in d.get("accepted") or []]
-maybe = [v for v in d.get("all_votes") or [] if v["status"] == "split"]
-panel_sentiment = d.get("sentiment") if d.get("sentiment") in SENTIMENTS else None
-panel_impact = int(d["impact"]) if d.get("impact") in IMPACTS else None
-impact_votes = d.get("impact_votes") or {}
+st.caption(f"{len(page)} comments on this page. Impact: {IMPACT_HELP}")
+choices = [card(n, item) for n, item in enumerate(page, start=1)]
 
-with st.container(border=True):
-    st.caption(item["QUESTION"])
-    st.markdown(f"#### {item['COMMENT_TEXT']}")
+allowed = set(all_pairs())
+ready = [c for c in choices if not c["skip"] and c["tags"] and all(t in allowed for t in c["tags"])
+         and c["sentiment"] in SENTIMENTS and c["impact"] in IMPACTS]
+skipping = [c for c in choices if c["skip"]]
+missing = [n for n, c in enumerate(choices, start=1) if not c["skip"] and c not in ready]
 
-st.markdown("**Agreed by the panel**")
-if agreed:
-    for p in agreed:
-        st.markdown(f":material/check_circle: {label(p)}")
-else:
-    st.caption("No tag was agreed by 3 or more models.")
-
-keep = []
-if maybe:
-    st.markdown("**Only 2 of 4 models chose these. Keep them?**")
-    for v in maybe:
-        p = f"{v['theme']} > {v['sub_theme']}"
-        if st.checkbox(label(p), key=f"m_{item['ITEM_ID']}_{p}"):
-            keep.append(p)
-
-st.markdown("**Sentiment**")
-sentiment = st.segmented_control("Sentiment", SENTIMENTS, default=panel_sentiment,
-                                 key=f"s_{item['ITEM_ID']}", label_visibility="collapsed")
-if panel_sentiment is None:
-    st.caption("The panel did not agree on sentiment. Please choose one.")
-
-st.markdown("**Impact**")
-impact = st.segmented_control("Impact", IMPACTS, default=panel_impact, key=f"i_{item['ITEM_ID']}",
-                              label_visibility="collapsed", help=IMPACT_HELP)
-if panel_impact is None:
-    said = ", ".join(f"{v}" for v in impact_votes.values()) or "no answer"
-    st.caption(f"The panel did not agree on impact (they said {said}). Please choose one.  ·  {IMPACT_HELP}")
-
-with st.expander("Edit tags"):
-    extra = st.multiselect("Add a tag", [p for p in all_pairs() if p not in agreed + keep],
-                           format_func=label, key=f"a_{item['ITEM_ID']}")
-    drop = st.multiselect("Remove an agreed tag", agreed, format_func=label, key=f"d_{item['ITEM_ID']}")
-
-final = [p for p in dict.fromkeys(agreed + keep + extra) if p not in drop]
-st.caption("Will be saved as: " + (", ".join(label(p) for p in final) or "nothing yet")
-           + f"  ·  {sentiment or 'no sentiment'}  ·  impact {impact or '?'}")
-
-with st.container(horizontal=True):
-    if st.button("Approve", type="primary", icon=":material/check:",
-                 disabled=not final or sentiment is None or impact is None):
-        if approve(item, final, sentiment, impact):
-            st.rerun()
-    if st.button("Skip", icon=":material/skip_next:"):
-        st.session_state.skipped.append(int(item["ITEM_ID"]))
-        st.rerun()
+st.caption(f"Ready to save: {len(ready)}  ·  skipped: {len(skipping)}"
+           + (f"  ·  incomplete (need tags, sentiment and impact): {', '.join(map(str, missing))}" if missing else ""))
+if st.button(f"Save this page ({len(ready)})", type="primary", icon=":material/check:",
+             disabled=not ready and not skipping):
+    who = reviewer()
+    for c in ready:
+        save(c["item"], c["tags"], c["sentiment"], c["impact"], who)
+    st.session_state.skipped += [int(c["item"]["ITEM_ID"]) for c in skipping]
+    st.session_state.saved_msg = True
+    st.session_state.saved_text = f"Saved {len(ready)}" + (f", skipped {len(skipping)}" if skipping else "")
+    st.rerun()

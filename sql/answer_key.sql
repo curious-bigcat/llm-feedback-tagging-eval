@@ -3,8 +3,9 @@
 --   tag given by 3-4 models with average confidence >= 0.7 -> accepted; by 2 models -> split; by 1 -> dropped
 --   sentiment: each model's overall label (more Positive or Negative tags); accepted when 3+ models agree
 --   impact (1-5): accepted when 3+ models gave one and all are within 1 point of each other; value = rounded median
---   no split + at least one accepted tag + accepted sentiment + accepted impact -> 'panel' (final);
---   otherwise 'needs_review', and the comment goes to REVIEW_QUEUE for a person to decide (-> 'human')
+--   no split + at least one accepted tag + accepted sentiment + accepted impact + fewer than 4 accepted tags -> 'panel'
+--   (final); otherwise 'needs_review', and the comment goes to REVIEW_QUEUE for a person to decide (-> 'human').
+--   The 4-tag guard catches over-tagging: most comments make 1-2 points, so 4+ agreed tags get a person's check.
 -- Re-runnable until the first review decision; after that it refuses, so a person's decisions are never lost.
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
@@ -86,8 +87,9 @@ BEGIN
          COALESCE(p.ACCEPTED, ARRAY_CONSTRUCT()) AS ACCEPTED, COALESCE(p.SPLITS, ARRAY_CONSTRUCT()) AS SPLITS,
          p.ALL_VOTES, p.SENT_VOTES, p.SENTIMENT, i.VOTES AS IMPACT_VOTES, i.IMPACT, i.PROPOSED AS IMPACT_PROPOSED,
          IFF(ARRAY_SIZE(COALESCE(p.SPLITS, ARRAY_CONSTRUCT())) = 0
-             AND ARRAY_SIZE(COALESCE(p.ACCEPTED, ARRAY_CONSTRUCT())) > 0
-             AND p.SENTIMENT IS NOT NULL AND i.IMPACT IS NOT NULL, 'panel', 'needs_review') AS DECIDED_BY
+             AND ARRAY_SIZE(COALESCE(p.ACCEPTED, ARRAY_CONSTRUCT())) BETWEEN 1 AND 3
+             AND p.SENTIMENT IS NOT NULL AND i.IMPACT IS NOT NULL, 'panel', 'needs_review') AS DECIDED_BY,
+         ARRAY_SIZE(COALESCE(p.ACCEPTED, ARRAY_CONSTRUCT())) >= 4 AS TOO_MANY_TAGS
   FROM SAMPLE_COMMENTS c
   LEFT JOIN per_comment p USING (COMMENT_ID)
   LEFT JOIN impact i USING (COMMENT_ID);
@@ -101,7 +103,8 @@ BEGIN
     SELECT 'panel_split', COMMENT_ID, 'PANEL_r1',
            OBJECT_CONSTRUCT('accepted', ACCEPTED, 'splits', SPLITS, 'sentiment', SENTIMENT,
                             'sentiment_votes', SENT_VOTES, 'all_votes', ALL_VOTES,
-                            'impact', IMPACT, 'impact_proposed', IMPACT_PROPOSED, 'impact_votes', IMPACT_VOTES)
+                            'impact', IMPACT, 'impact_proposed', IMPACT_PROPOSED, 'impact_votes', IMPACT_VOTES,
+                            'too_many_tags', TOO_MANY_TAGS)
     FROM T_VOTES WHERE DECIDED_BY = 'needs_review';
 
   RETURN (SELECT OBJECT_AGG(DECIDED_BY, n::VARIANT) FROM (SELECT DECIDED_BY, COUNT(*) n FROM ANSWER_KEY GROUP BY 1));

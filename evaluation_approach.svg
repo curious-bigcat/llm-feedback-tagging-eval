@@ -32,7 +32,7 @@
     <circle cx="414" cy="176" r="22" fill="#29B5E8"/>
     <text x="414" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">1</text>
     <text x="414" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Pick a sample</text>
-    <text x="414" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">209</text>
+    <text x="414" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">207</text>
     <text x="414" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">comments, every sub-theme</text>
 
     <!-- 2 Answer key -->
@@ -40,7 +40,7 @@
     <circle cx="670" cy="176" r="22" fill="#29B5E8"/>
     <text x="670" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">2</text>
     <text x="670" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Answer key</text>
-    <text x="670" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">72 + 137</text>
+    <text x="670" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">67 + 140</text>
     <text x="670" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">panel + human decided</text>
 
     <!-- 3 Grid -->
@@ -48,15 +48,15 @@
     <circle cx="926" cy="176" r="22" fill="#29B5E8"/>
     <text x="926" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">3</text>
     <text x="926" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">Test grid</text>
-    <text x="926" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">8 setups</text>
-    <text x="926" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">5,016 answers</text>
+    <text x="926" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">12 setups</text>
+    <text x="926" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">7,452 answers</text>
 
     <!-- 4 Judge -->
     <rect x="1064" y="140" width="236" height="230" rx="18" fill="#EAF7FD" stroke="#29B5E8" stroke-width="2.5"/>
     <circle cx="1182" cy="176" r="22" fill="#29B5E8"/>
     <text x="1182" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">4</text>
     <text x="1182" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#11567F">AI judge</text>
-    <text x="1182" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">15,044</text>
+    <text x="1182" y="300" text-anchor="middle" font-size="40" font-weight="700" fill="#29B5E8">22,344</text>
     <text x="1182" y="330" text-anchor="middle" font-size="16" fill="#5B6B7A">scores</text>
 
     <!-- 5 Decision -->
@@ -65,7 +65,7 @@
     <text x="1438" y="185" text-anchor="middle" font-size="24" font-weight="700" fill="#FFFFFF">5</text>
     <text x="1438" y="232" text-anchor="middle" font-size="26" font-weight="700" fill="#1E6E3F">Decision</text>
     <text x="1438" y="290" text-anchor="middle" font-size="25" font-weight="700" fill="#2E9E5B">Gemini 3.1 Pro</text>
-    <text x="1438" y="322" text-anchor="middle" font-size="25" font-weight="700" fill="#2E9E5B">+ structured prompt</text>
+    <text x="1438" y="322" text-anchor="middle" font-size="25" font-weight="700" fill="#2E9E5B">+ structured v3</text>
   </g>
 
   <!-- Arrows between header cards -->
@@ -114,12 +114,14 @@
     <text x="568" y="492">• 2 of 4: a person decides</text>
     <text x="568" y="512">  (human in the loop)</text>
     <text x="568" y="540">• 1 of 4: dropped</text>
-    <text x="568" y="568">• Sentiment: 3 of 4 agree;</text>
-    <text x="568" y="588">  impact: all within 1 point</text>
+    <text x="568" y="564">• Sentiment: 3 of 4 agree;</text>
+    <text x="568" y="584">  impact: all within 1 point</text>
+    <text x="568" y="608">• 4+ agreed tags: a person</text>
+    <text x="568" y="628">  checks (over-tagging)</text>
     <!-- 3 -->
-    <text x="824" y="420">• 4 models × 2 prompts</text>
-    <text x="824" y="440">  (current, structured)</text>
-    <text x="824" y="468">• Each tags all 209</text>
+    <text x="824" y="420">• 4 models × 3 prompts</text>
+    <text x="824" y="440">  (current, structured v2, v3)</text>
+    <text x="824" y="468">• Each tags all 207</text>
     <text x="824" y="488">  comments 3 times, to</text>
     <text x="824" y="508">  check consistency</text>
     <text x="824" y="536">• Automatic checks: real</text>
@@ -134,16 +136,18 @@
     <text x="1080" y="516">  tag supported? (0-1)</text>
     <text x="1080" y="544">• Coherence: do the tags</text>
     <text x="1080" y="564">  fit together? (0-1)</text>
-    <text x="1080" y="596" fill="#5B6B7A">Judge is not a tested model</text>
+    <text x="1080" y="592">• Plus plain SQL: precision,</text>
+    <text x="1080" y="612">  recall, F1, tags/comment</text>
+    <text x="1080" y="632" fill="#5B6B7A">Judge is not a tested model</text>
     <!-- 5 -->
-    <text x="1336" y="420">Compare all 8 setups on:</text>
-    <text x="1336" y="444">• the 3 judge scores</text>
+    <text x="1336" y="420">Compare all 12 setups on:</text>
+    <text x="1336" y="444">• judge + tag accuracy</text>
     <text x="1336" y="468">• valid answers</text>
     <text x="1336" y="492">• stability over repeats</text>
     <text x="1336" y="516">• cost per comment</text>
     <text x="1336" y="552" fill="#5B6B7A">Cheaper alternative:</text>
-    <text x="1336" y="574" fill="#5B6B7A">GPT-5.4 + structured prompt</text>
-    <text x="1336" y="596" fill="#5B6B7A">(correctness 2.60, 40% of cost)</text>
+    <text x="1336" y="574" fill="#5B6B7A">Mistral + v3 (today's cost)</text>
+    <text x="1336" y="596" fill="#5B6B7A">or GPT-5.4 + v3 (1/3 of cost)</text>
   </g>
 
   <!-- ===== IN SNOWFLAKE panels (y 660-920) ===== -->
@@ -191,7 +195,7 @@
     <!-- 3 -->
     <text x="824" y="692">Same RUN_MODEL; one</text>
     <text x="824" y="712">warehouse per setup, all</text>
-    <text x="824" y="732">24 runs in parallel</text>
+    <text x="824" y="732">36 runs in parallel</text>
     <text x="824" y="752">(≈ 10 min)</text>
     <text x="824" y="780" font-family="Menlo, monospace" font-size="15" fill="#11567F">ANSWERS</text>
     <text x="824" y="814" font-weight="700" fill="#11567F">Models tested</text>
@@ -205,8 +209,9 @@
     <text x="1080" y="740">Replays saved answers,</text>
     <text x="1080" y="760">no new model calls;</text>
     <text x="1080" y="780">judge prompts sent in</text>
-    <text x="1080" y="800">one parallel batch</text>
-    <text x="1080" y="828">(≈ 10 min)</text>
+    <text x="1080" y="800">batches, 3 runs per</text>
+    <text x="1080" y="820">warehouse; SQL views</text>
+    <text x="1080" y="840">TAG_SCORES</text>
     <text x="1080" y="862" font-weight="700" fill="#11567F">Judge model</text>
     <text x="1080" y="884">Claude Sonnet 4.6</text>
     <!-- 5 -->
@@ -217,7 +222,7 @@
     <text x="1336" y="780">Written up in</text>
     <text x="1336" y="800">decision_report.md</text>
     <text x="1336" y="842" font-weight="700" fill="#11567F">Whole evaluation</text>
-    <text x="1336" y="864">≈ 160 credits</text>
+    <text x="1336" y="864">≈ 227 credits</text>
   </g>
 
   <!-- ===== Bottom: today vs winner ===== -->
@@ -225,16 +230,16 @@
   <text x="70" y="998" font-size="23" font-weight="700" fill="#11567F">Today vs. winner</text>
   <g font-size="20" fill="#2B3A47">
     <text x="70" y="1040">Today: Mistral Large 3, current prompt</text>
-    <text x="70" y="1078">Winner: Gemini 3.1 Pro, structured prompt</text>
+    <text x="70" y="1078">Winner: Gemini 3.1 Pro, structured v3</text>
     <text x="580" y="998" font-weight="700" fill="#5B6B7A">Correctness</text>
-    <text x="580" y="1040">2.32 of 3</text>
-    <text x="580" y="1078" font-weight="700" fill="#2E9E5B">2.65 of 3</text>
-    <text x="800" y="998" font-weight="700" fill="#5B6B7A">Tags supported</text>
-    <text x="800" y="1040">63%</text>
-    <text x="800" y="1078" font-weight="700" fill="#2E9E5B">84%</text>
+    <text x="580" y="1040">2.35 of 3</text>
+    <text x="580" y="1078" font-weight="700" fill="#2E9E5B">2.60 of 3</text>
+    <text x="800" y="998" font-weight="700" fill="#5B6B7A">Tags right</text>
+    <text x="800" y="1040">51%</text>
+    <text x="800" y="1078" font-weight="700" fill="#2E9E5B">75%</text>
     <text x="1030" y="998" font-weight="700" fill="#5B6B7A">Valid answers</text>
-    <text x="1030" y="1040">173 of 209</text>
-    <text x="1030" y="1078" font-weight="700" fill="#2E9E5B">209 of 209</text>
+    <text x="1030" y="1040">170 of 207</text>
+    <text x="1030" y="1078" font-weight="700" fill="#2E9E5B">205 of 207</text>
     <text x="1270" y="998" font-weight="700" fill="#5B6B7A">Cost per 1,000 comments</text>
     <text x="1270" y="1040">5 credits</text>
     <text x="1270" y="1078" font-weight="700" fill="#2E9E5B">20 credits</text>

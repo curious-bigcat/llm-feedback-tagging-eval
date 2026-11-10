@@ -5,10 +5,23 @@ most accurately, treating the data like real customer feedback (text only, no la
 
 Everything runs in Snowflake: database `VOC_EVAL`, schema `HARNESS`, role `VOC_EVAL_ROLE`.
 
-**Result in one line:** switch from today's setup (Mistral Large 3, current prompt) to **Gemini 3.1 Pro with the structured
-prompt (C08)**: joint best on correctness, best on tag quality, valid for all 209 comments, at about 3.9x today's
-cost per comment. Cheaper option: GPT-5.4 with the structured prompt (C07). Full details in `decision_report.md`. This run
-(v2, with impact) cost about 162 credits.
+**Result (v3, current):** switch from today's setup (Mistral Large 3, current prompt) to **Gemini 3.1 Pro with the
+structured v3 prompt (C09)**: top precision (0.75) and groundedness/coherence (0.85), the right number of tags (1.89
+per comment vs the key's 1.69), valid for 205 of 207 comments and by far the most consistent (same tags in all 3 runs
+for 83% of comments; today's setup 39%), at about 3.8x today's cost. **Quick win at today's cost:** keep Mistral and
+switch only the prompt to v3 (C10: precision 0.51 -> 0.65, consistency 39% -> 58%). Cheaper option: GPT-5.4 with v3
+(C11). Full details in `decision_report.md`. This run cost about 227 credits.
+
+**Result of the previous run (v2):** switch from today's setup (Mistral Large 3, current prompt) to **Gemini 3.1 Pro with
+the structured prompt (C08)**: joint best on correctness, best on tag quality, valid for all 209 comments, at about
+3.9x today's cost per comment. Cheaper option: GPT-5.4 with the structured prompt (C07). That run cost about 162
+credits; v3 confirms Gemini 3.1 Pro as the best model.
+
+**Why v3 (a fresh, step-by-step rerun with tag-accuracy checks):** an aggregation trial showed that wrong
+tags distort the reports built from them: today's setup gave about 3.1 sub-themes per comment where the answer key
+has 1.7, so only about half of its tags were right (precision 48%, recall 88%). v3 therefore adds plain-SQL
+**precision, recall, F1 and over-tagging** checks (`sql/tag_scores.sql`) at every step, alongside the AI judge.
+The v2 Snowflake results were cleared for the fresh start; its numbers stay in this README.
 
 ## The approach at a glance
 
@@ -17,6 +30,148 @@ cost per comment. Cheaper option: GPT-5.4 with the structured prompt (C07). Full
 ---
 
 ## Where we are
+
+**v3 (current run):**
+
+| Step | Status |
+|---|---|
+| 0. Roll back the paused aggregation trial | Done: objects removed, files parked in `legacy/aggregation/` |
+| 1. Fresh start | Done: result tables and Evaluations runs cleared; `COMMENTS`, `TAXONOMY` and setup kept |
+| 2. Pick a test sample | Done: **207 comments** (every sub-theme 10+ except Parking 3; every impact level 17+) |
+| 3. Panel + over-tagging check | Done: 4 models, 1.8-2.3 tags per comment, none over-tagging (see below) |
+| 4. Answer key + human review (new: 4+ tag guard) | Done: 67 panel + 140 human = 207 rows, 1.69 tags per comment. Review app shows **10 comments per page** with one "Save this page" button |
+| 5. Tag-accuracy scores (precision, recall, F1) | Done (`sql/tag_scores.sql`). Panel vs key: F1 0.75-0.81 (partly circular: the panel built the key) |
+| 6. Grid (smoke test, then 8 setups x 3 repeats) | Done: 24 runs, 4,968 answers (see below) |
+| 7. Over-tagging fix test (C09-C12: v3 prompt on all 4 models) | Done: the v3 rule helps every model (precision +0.03 to +0.14, consistency up); a confidence cut does not |
+| 8. Judge (12 setups x 3 repeats = 36 runs) | Done: all 36 runs, 207 tag scores each; 12 of 7,452 correctness scores missing (left out of averages) |
+| 9. Decision report | Done: `decision_report.md` (v3). Winner **C09 Gemini 3.1 Pro + structured_v3** |
+
+**Step 3 panel profile** (`TAG_PROFILE`, no answer key needed, checked before voting):
+
+| Panel | Model | Passed the checks | Tags per comment | 1 tag | 4+ tags |
+|---|---|---|---|---|---|
+| P01 | Claude Haiku 4.5 | 124 / 207 | 1.94 | 45% | 10% |
+| P02 | GPT-5.4 mini | 179 / 207 | 2.26 | 32% | 16% |
+| P03 | Gemini 3.8 Flash | 198 / 207 | 2.08 | 38% | 12% |
+| P04 | Mistral Large 2 | 185 / 207 | 1.81 | 47% | 5% |
+
+All under the 2.5 warning level, so all 4 vote. GPT-5.4 mini tags the most; because a tag needs 3 of 4 models, its
+extra tags cannot enter the key on their own. Haiku fails mostly on sentiment scores not matching the label; the key
+uses only its tags, labels and impact.
+
+**Step 4 answer key:** 67 rows settled by the panel (1.43 tags per comment) + 140 by a person (1.81) = 207 rows,
+**1.69 tags per comment**. The reviewer added tags on 26 comments (mostly 2-of-4 suggestions) and removed tags on 1,
+so the key leans towards finding every point rather than being strict.
+
+**Step 5 panel vs the key** (partly circular: the panel's votes helped build the key, so this is a sanity check):
+
+| Panel | Model | Precision | Recall | F1 | Tags per comment | Exact match |
+|---|---|---|---|---|---|---|
+| P01 | Claude Haiku 4.5 | 0.76 | 0.87 | 0.81 | 1.94 | 54% |
+| P02 | GPT-5.4 mini | 0.69 | 0.92 | 0.79 | 2.26 | 47% |
+| P03 | Gemini 3.8 Flash | 0.73 | 0.90 | 0.80 | 2.08 | 52% |
+| P04 | Mistral Large 2 | 0.72 | 0.77 | 0.75 | 1.81 | 47% |
+
+**Step 6 grid, repeat 1** (`TAG_SCORES` vs the answer key; key = 1.69 tags per comment):
+
+| Setup | Valid (of 207) | Precision | Recall | F1 | Tags per comment | Over-tagged comments | Exact match |
+|---|---|---|---|---|---|---|---|
+| C04 Gemini / current | 187 | 0.75 | 0.86 | **0.80** | 1.94 | 28% | 56% |
+| C08 Gemini / structured | **206** | 0.73 | 0.84 | 0.78 | 1.96 | 29% | 53% |
+| C06 Opus / structured | 206 | 0.61 | 0.89 | 0.73 | 2.45 | 50% | 37% |
+| C07 GPT-5.4 / structured | 194 | 0.62 | 0.85 | 0.72 | 2.31 | 45% | 37% |
+| C02 Opus / current | 171 | 0.60 | 0.91 | 0.72 | 2.55 | 56% | 36% |
+| C03 GPT-5.4 / current | 188 | 0.61 | 0.89 | 0.72 | 2.49 | 51% | 39% |
+| C05 Mistral / structured | 182 | 0.58 | 0.88 | 0.70 | 2.55 | 58% | 32% |
+| C01 Mistral / current (today) | 172 | 0.51 | 0.88 | 0.64 | **2.93** | **72%** | 21% |
+
+Every setup finds most of the right tags (recall 0.84-0.91); they differ in how many wrong extra tags they add.
+Today's setup over-tags 72% of comments; its most over-used sub-themes are Continuity of care, Staff listening and
+Competence & training (precision 0.24-0.40). Gemini 3.1 Pro is the only model close to the key's tag count.
+
+**Step 6 grid, all 3 repeats** (averages; F1 range across repeats; "same in 3 repeats" = share of comments with the
+identical answer in all 3 runs):
+
+| Setup | Valid (of 207) | Precision | Recall | F1 (range) | Tags per comment | Over-tagged | Same tags in 3 repeats | Same impact in 3 repeats |
+|---|---|---|---|---|---|---|---|---|
+| C04 Gemini / current | 188 | 0.75 | 0.86 | **0.80** (0.80-0.80) | 1.94 | 29% | 72% | 93% |
+| C08 Gemini / structured | **206** | 0.72 | 0.85 | 0.78 (0.78-0.79) | 1.98 | 30% | 69% | 88% |
+| C06 Opus / structured | 205 | 0.61 | 0.90 | 0.73 (0.72-0.73) | 2.46 | 51% | **73%** | **94%** |
+| C03 GPT-5.4 / current | 183 | 0.61 | 0.90 | 0.72 (0.72-0.73) | 2.48 | 52% | 61% | 86% |
+| C02 Opus / current | 173 | 0.60 | 0.90 | 0.72 (0.72-0.72) | 2.52 | 54% | 69% | 93% |
+| C07 GPT-5.4 / structured | 194 | 0.63 | 0.85 | 0.72 (0.72-0.72) | 2.29 | 43% | 63% | 88% |
+| C05 Mistral / structured | 179 | 0.58 | 0.88 | 0.70 (0.70-0.71) | 2.56 | 57% | 45% | 85% |
+| C01 Mistral / current (today) | 170 | 0.51 | 0.89 | 0.65 (0.64-0.65) | 2.92 | 73% | **39%** | 83% |
+
+F1 moves by at most 0.01 between repeats, so the gaps between setups are real. Today's setup gives the same tags in
+all 3 repeats for only 39% of comments.
+
+**Step 7: over-tagging fix.** Two ideas tested:
+
+1. *Drop low-confidence tags* (free, SQL only): does not work. The models are confident even about wrong tags; today's
+   setup rates almost every tag 0.8 or higher, so a 0.7 cut removes nothing. Only a 0.9 cut removes tags, and then
+   correct tags go too (C08: precision 0.72 -> 0.80 but recall 0.85 -> 0.72, F1 0.78 -> 0.76).
+2. *Tell the model not to over-tag* (new setup **C09** = Gemini 3.1 Pro + `prompts/structured_v3.txt`, which is
+   `structured_v2` plus one rule: "tag a sub-theme only when the comment makes a clear point about it; most comments
+   make 1-2 points", with an example, and a matching final check). One variable changed against C08. Result
+   (3 repeats each):
+
+   | Setup | Valid (of 207) | Precision | Recall | F1 (range) | Tags per comment | Over-tagged | Same tags in 3 repeats |
+   |---|---|---|---|---|---|---|---|
+   | C04 Gemini / current | 188 | 0.75 | 0.86 | 0.80 (0.80-0.80) | 1.94 | 29% | 72% |
+   | C08 Gemini / structured_v2 | 206 | 0.72 | 0.85 | 0.78 (0.78-0.79) | 1.98 | 30% | 69% |
+   | **C09 Gemini / structured_v3** | 205 | **0.75** | 0.84 | **0.79** (0.79-0.79) | **1.89** | **25%** | **83%** |
+
+   The rule helps: against C08, precision +0.03, over-tagged comments 30% -> 25%, for a small recall cost
+   (0.85 -> 0.84, under-tagged 6% -> 9%). F1 rises 0.78 -> 0.79 and the same tags in all 3 repeats rise 69% -> 83%,
+   the most consistent setup so far. C09 matches C04's precision while keeping C08's validity (205 vs 188).
+
+3. *The same v3 rule on the other 3 models* (C10 Mistral, C11 GPT-5.4, C12 Opus), to check the fix comes from the
+   prompt and not from Gemini. Per model, current -> structured_v2 -> structured_v3 (3 repeats each):
+
+   | Model | Prompt | Setup | Valid (of 207) | Precision | Recall | F1 | Tags per comment | Over-tagged | Same tags in 3 repeats |
+   |---|---|---|---|---|---|---|---|---|---|
+   | Mistral Large 3 | current | C01 (today) | 170 | 0.51 | 0.89 | 0.65 | 2.92 | 73% | 39% |
+   | Mistral Large 3 | structured_v2 | C05 | 179 | 0.58 | 0.88 | 0.70 | 2.56 | 57% | 45% |
+   | Mistral Large 3 | structured_v3 | **C10** | 185 | **0.65** | 0.85 | **0.74** | **2.21** | **43%** | **58%** |
+   | GPT-5.4 | current | C03 | 183 | 0.61 | 0.90 | 0.72 | 2.48 | 52% | 61% |
+   | GPT-5.4 | structured_v2 | C07 | 194 | 0.63 | 0.85 | 0.72 | 2.29 | 43% | 63% |
+   | GPT-5.4 | structured_v3 | **C11** | 195 | **0.67** | 0.84 | **0.74** | **2.13** | **37%** | **68%** |
+   | Claude Opus 5 | current | C02 | 173 | 0.60 | 0.90 | 0.72 | 2.52 | 54% | 69% |
+   | Claude Opus 5 | structured_v2 | C06 | 205 | 0.61 | 0.90 | 0.73 | 2.46 | 51% | 73% |
+   | Claude Opus 5 | structured_v3 | **C12** | 203 | **0.66** | 0.87 | **0.75** | **2.23** | **42%** | **77%** |
+   | Gemini 3.1 Pro | current | C04 | 188 | 0.75 | 0.86 | 0.80 | 1.94 | 29% | 72% |
+   | Gemini 3.1 Pro | structured_v2 | C08 | 206 | 0.72 | 0.85 | 0.78 | 1.98 | 30% | 69% |
+   | Gemini 3.1 Pro | structured_v3 | **C09** | 205 | 0.75 | 0.84 | 0.79 | **1.89** | **25%** | **83%** |
+
+   The rule works on every model: v3 gives each model its best precision, fewest tags, least over-tagging and
+   highest consistency, for a recall cost of 0.01-0.03. It helps weaker models most: today's model (Mistral Large 3)
+   goes from 2.92 to 2.21 tags per comment, precision 0.51 -> 0.65, F1 0.65 -> 0.74 and consistency 39% -> 58% with
+   no model change. Gemini 3.1 Pro stays best on every tag measure with any prompt.
+
+**Step 8 judge** (Claude Sonnet 4.6 in Snowflake Evaluations, app `GV_TAGGER`; averages of 3 repeats; correctness
+range in brackets). Ran in 2 waves with 3 judge runs per warehouse (a 20-comment test with 12 runs on one warehouse
+lost 3 runs to upload collisions):
+
+| Setup | Correctness (0-3) | Groundedness | Coherence | F1 (SQL) |
+|---|---|---|---|---|
+| C04 Gemini / current | **2.64** (2.63-2.64) | 0.83 | 0.84 | **0.80** |
+| C08 Gemini / v2 | 2.63 (2.62-2.66) | 0.83 | 0.84 | 0.78 |
+| **C09 Gemini / v3** | 2.60 (2.59-2.61) | **0.85** | **0.85** | 0.79 |
+| C11 GPT-5.4 / v3 | 2.60 (2.58-2.62) | 0.78 | 0.78 | 0.74 |
+| C07 GPT-5.4 / v2 | 2.59 (2.57-2.59) | 0.76 | 0.76 | 0.72 |
+| C03 GPT-5.4 / current | 2.57 (2.56-2.58) | 0.72 | 0.72 | 0.72 |
+| C06 Opus / v2 | 2.56 (2.52-2.59) | 0.76 | 0.75 | 0.73 |
+| C12 Opus / v3 | 2.55 (2.53-2.57) | 0.78 | 0.78 | 0.75 |
+| C02 Opus / current | 2.51 (2.47-2.55) | 0.75 | 0.73 | 0.72 |
+| C10 Mistral / v3 | 2.50 (2.48-2.53) | 0.70 | 0.73 | 0.74 |
+| C05 Mistral / v2 | 2.47 (2.46-2.49) | 0.68 | 0.69 | 0.70 |
+| C01 Mistral / current (today) | 2.35 (2.33-2.38) | 0.63 | 0.60 | 0.65 |
+
+The judge and the plain-SQL F1 agree: Gemini first, today's setup last, and v3 raises groundedness and coherence
+for every model.
+
+**v2 (previous run, results in `decision_report.md`):**
 
 | Step | Status |
 |---|---|
@@ -161,12 +316,12 @@ Each setup tags the 209 sample comments 3 times (to check consistency), with `RU
 runs on its own warehouse (`VOC_GV_C01`..`C08`) with its 3 repeats at the same time, so all 24 runs go in
 parallel. Run ids look like `C04_r2`. Took about 15 minutes (Gemini 3.1 Pro was slowest).
 
-| | Current prompt | Structured prompt |
-|---|---|---|
-| Mistral Large 3 | C01 (today's setup) | C05 |
-| Claude Opus 5 | C02 | C06 |
-| GPT-5.4 | C03 | C07 |
-| Gemini 3.1 Pro | C04 | C08 |
+| | Current prompt | Structured prompt (v2) | Structured prompt v3 (v3 run, anti-over-tagging) |
+|---|---|---|---|
+| Mistral Large 3 | C01 (today's setup) | C05 | C10 |
+| Claude Opus 5 | C02 | C06 | C12 |
+| GPT-5.4 | C03 | C07 | C11 |
+| Gemini 3.1 Pro | C04 | C08 | C09 |
 
 **Valid answers** (passed the automatic checks, out of 209 per repeat):
 
@@ -263,6 +418,7 @@ about 162 credits), limitations and next steps.
 | Procedure | `RUN_MODEL(model_id, repeat)` | Runs one model over the sample, e.g. `CALL RUN_MODEL('P01', 1)` |
 | Procedure | `JUDGE_RUN(model_id, repeat, limit)` | Judges one grid run in Snowflake Evaluations, e.g. `CALL JUDGE_RUN('C04', 2, 0)` |
 | Function | `CHECK_ANSWER`, `NORM_QUOTE` | The automatic answer checks and quote matching |
+| View | `RUN_TAGS`, `TAG_PROFILE`, `TAG_SCORES`, `TAG_SCORES_BY_SUBTHEME` | Plain-SQL tag accuracy: tags per comment, precision, recall, F1, over-tagging (`sql/tag_scores.sql`) |
 | Streamlit | `GV_REVIEW` | Review app (answer-key splits) |
 | Evaluations app | `GV_TAGGER` | The judge's runs and scores (created by TruLens); 24 full runs + 24 `*_test20` test runs |
 | Stage | `DATA_STAGE` | Uploaded data, prompts, scripts and app files |
@@ -278,11 +434,13 @@ Warehouses: `VOC_GV_PANEL` (panel runs), `VOC_GV_C01`..`VOC_GV_C08` (one per gri
 | `evaluation_approach.svg` | Editable source of the diagram (open in a browser, Figma or Illustrator) |
 | `data/comments.csv`, `data/taxonomy.csv` | Raw data |
 | `prompts/current_v2.txt`, `prompts/structured_v2.txt` | The two prompts being compared (with the impact rule) |
+| `prompts/structured_v3.txt` | `structured_v2` + a rule against over-tagging (setup C09) |
 | `prompts/current_v1.txt`, `prompts/structured_v1.txt` | The first-run prompts (no impact), kept for the record |
 | `sql/sample.sql` | Step 2: builds `SAMPLE_COMMENTS` |
 | `sql/setup.sql` | Prompts, models, rulebook, checks, answers table, review queue, `RUN_MODEL` |
 | `sql/answer_key.sql` | Step 3: builds `ANSWER_KEY` from the panel and queues disagreements |
 | `sql/judge.sql` | Step 6: the `JUDGE_RUN` procedure |
+| `sql/tag_scores.sql` | Tag-accuracy views: `TAG_PROFILE` (tags per comment), `TAG_SCORES` (precision, recall, F1, over/under-tagging), `TAG_SCORES_BY_SUBTHEME` |
 | `notebook/judge_app.py` | Step 6: the TruLens app (replays answers) and the two custom judge metrics |
 | `app/streamlit_app.py`, `app/environment.yml` | The GV_REVIEW app |
 | `prep.py`, `make_label_map.py` | Earlier data-prep scripts (built `data/*.csv` from the NHS source files); kept for the record, not used by the current pipeline |
@@ -290,6 +448,7 @@ Warehouses: `VOC_GV_PANEL` (panel runs), `VOC_GV_C01`..`VOC_GV_C08` (one per gri
 | `split.py`, `PLAN.md`, `rules.md` | Earlier sample split script, plan and labelling rules; kept for the record, not used now |
 | `sql/00_admin.sql` .. `sql/07_sample.sql` | Earlier numbered SQL pipeline (before `setup.sql`, `sample.sql`, `answer_key.sql`, `judge.sql`); kept for the record, not used now |
 | `judge_bundle/judge.ipynb`, `judge_bundle/requirements.txt` | Earlier notebook version of the judge; kept for the record, not used now |
+| `legacy/aggregation/` | Paused aggregation test (report counts, summaries by one prompt / map-reduce / AI_AGG, report scoring); to resume after the tagging rework |
 
 ## Rebuild from scratch
 

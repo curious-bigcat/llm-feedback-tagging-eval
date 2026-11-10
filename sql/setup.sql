@@ -24,6 +24,10 @@ INSERT INTO MODELS VALUES
   ('C06', 'challenger', 'claude-opus-5',       'structured_v2'),
   ('C07', 'challenger', 'openai-gpt-5.4',      'structured_v2'),
   ('C08', 'challenger', 'gemini-3.1-pro',      'structured_v2'),
+  ('C09', 'challenger', 'gemini-3.1-pro',      'structured_v3'),  -- v3 = v2 + rule against over-tagging
+  ('C10', 'challenger', 'mistral-large3',      'structured_v3'),
+  ('C11', 'challenger', 'openai-gpt-5.4',      'structured_v3'),
+  ('C12', 'challenger', 'claude-opus-5',       'structured_v3'),
   ('P01', 'panel',      'claude-haiku-4-5',    'current_v2'),
   ('P02', 'panel',      'openai-gpt-5.4-mini', 'current_v2'),
   ('P03', 'panel',      'gemini-3.8-flash',    'current_v2'),
