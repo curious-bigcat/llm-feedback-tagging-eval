@@ -20,8 +20,8 @@ $$
     '\\s+([.,;:!?)])', '\\1'), '\\s+', ' '), '^[\\s"'']+|[\\s"'']+$', ''))
 $$;
 
--- GV_SPLIT: one row per comment with its group and why.
-CREATE OR REPLACE TABLE GV_SPLIT AS
+-- V1_SPLIT: one row per comment with its group and why.
+CREATE OR REPLACE TABLE V1_SPLIT AS
 WITH quotes AS (
   SELECT DISTINCT NORM_QUOTE(f.value::STRING) AS QUOTE
   FROM TAXONOMY t,
@@ -43,7 +43,7 @@ JOIN people p USING (RESPONDENT_ID)
 LEFT JOIN leaked l USING (RESPONDENT_ID);
 
 -- Checks: every comment has a group, no person in both groups, no leaked comment in EVAL.
-SELECT 'every comment has a group' AS CHECK_NAME, (SELECT COUNT(*) FROM COMMENTS) - COUNT(*) AS PROBLEMS FROM GV_SPLIT
+SELECT 'every comment has a group' AS CHECK_NAME, (SELECT COUNT(*) FROM COMMENTS) - COUNT(*) AS PROBLEMS FROM V1_SPLIT
 UNION ALL SELECT 'no person in both groups', COUNT(*) FROM (
-  SELECT RESPONDENT_ID FROM GV_SPLIT GROUP BY 1 HAVING COUNT(DISTINCT GRP) > 1)
-UNION ALL SELECT 'no leaked comment in EVAL', COUNT(*) FROM GV_SPLIT WHERE GRP = 'EVAL' AND REASON = 'leaked example';
+  SELECT RESPONDENT_ID FROM V1_SPLIT GROUP BY 1 HAVING COUNT(DISTINCT GRP) > 1)
+UNION ALL SELECT 'no leaked comment in EVAL', COUNT(*) FROM V1_SPLIT WHERE GRP = 'EVAL' AND REASON = 'leaked example';

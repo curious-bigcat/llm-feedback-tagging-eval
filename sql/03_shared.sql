@@ -4,13 +4,13 @@
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
 
--- GV_RULEBOOK (1 row), built from TAXONOMY:
+-- V1_RULEBOOK (1 row), built from TAXONOMY:
 --   TAXONOMY_TEXT   all 33 sub-themes with definitions and examples, pasted into every prompt
 --   ALLOWED_PAIRS   the 33 valid "Theme > Sub-theme" strings, used to reject a sub-theme under the wrong theme
 --   RESPONSE_FORMAT the fixed answer format (JSON schema) for AI_COMPLETE: the model must return {"tags": [...]}
 --                   with all 6 fields, and can only use the real theme / sub-theme names and
 --                   Positive / Neutral / Negative. What it can't enforce is checked by CHECK_ANSWER.
-CREATE OR REPLACE VIEW GV_RULEBOOK AS
+CREATE OR REPLACE VIEW V1_RULEBOOK AS
 SELECT
   'nhs_v7' AS TAXONOMY_VERSION,
   LISTAGG('- ' || THEME || ' > ' || SUB_THEME || ': ' || DEFINITION
@@ -35,29 +35,29 @@ SELECT
   ) AS RESPONSE_FORMAT
 FROM TAXONOMY;
 
--- GV_COMMENT_SETS: which comment ids each job uses. SAMPLE = the scored TEST comments in GV_SAMPLE; TEST = every
+-- V1_COMMENT_SETS: which comment ids each job uses. SAMPLE = the scored TEST comments in V1_SAMPLE; TEST = every
 -- TEST comment (only the sorter uses it, to pick the sample); TRIAL = 20 PRACTICE comments picked by a fixed
 -- SHA2 shuffle, so the same 20 every time.
-CREATE OR REPLACE VIEW GV_COMMENT_SETS AS
-SELECT 'SAMPLE' AS COMMENT_SET, COMMENT_ID FROM GV_SAMPLE
+CREATE OR REPLACE VIEW V1_COMMENT_SETS AS
+SELECT 'SAMPLE' AS COMMENT_SET, COMMENT_ID FROM V1_SAMPLE
 UNION ALL
 SELECT 'TEST', COMMENT_ID FROM COMMENTS WHERE PILE = 'TEST'
 UNION ALL
 SELECT 'TRIAL', COMMENT_ID FROM COMMENTS WHERE PILE = 'PRACTICE'
 QUALIFY ROW_NUMBER() OVER (ORDER BY SHA2('nhs_eval_v1|trial|' || COMMENT_ID)) <= 20;
 
--- GV_REQUESTS: the exact request sent to a model, one row per comment x prompt version.
+-- V1_REQUESTS: the exact request sent to a model, one row per comment x prompt version.
 -- Fills the prompt's {TAXONOMY}, {QUESTION} and {COMMENT} slots and carries the answer format and the
 -- prompt fingerprint. The model never sees an answer key.
-CREATE OR REPLACE VIEW GV_REQUESTS AS
+CREATE OR REPLACE VIEW V1_REQUESTS AS
 SELECT s.COMMENT_SET, c.COMMENT_ID, p.PROMPT_VERSION, p.SHA256 AS PROMPT_SHA256, r.TAXONOMY_VERSION,
        REPLACE(REPLACE(REPLACE(p.PROMPT_TEXT, '{TAXONOMY}', r.TAXONOMY_TEXT),
                '{QUESTION}', c.QUESTION), '{COMMENT}', c.COMMENT_TEXT) AS PROMPT_FILLED,
        r.RESPONSE_FORMAT
-FROM GV_COMMENT_SETS s
+FROM V1_COMMENT_SETS s
 JOIN COMMENTS c USING (COMMENT_ID)
 CROSS JOIN PROMPTS p
-CROSS JOIN GV_RULEBOOK r;
+CROSS JOIN V1_RULEBOOK r;
 
 -- NORM_QUOTE: prepares text for the quote check so punctuation style doesn't count, but words must match.
 -- Lower case, curly quotes to straight, no space before punctuation, single spaces, and no quote marks

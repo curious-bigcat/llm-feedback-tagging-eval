@@ -28,7 +28,7 @@ CREATE STAGE IF NOT EXISTS DATA_STAGE FILE_FORMAT = CSV_FMT;
 
 -- COMMENTS: the 6,211 raw patient comments, with no expert answers (they were deleted).
 -- PILE = TEST (scoring only) or PRACTICE (trying things out), one pile per person; LEAKED_QUOTE = contains a
--- rulebook example, so kept in PRACTICE. Which TEST comments are scored is decided by us, in GV_SAMPLE.
+-- rulebook example, so kept in PRACTICE. Which TEST comments are scored is decided by us, in V1_SAMPLE.
 -- Time Travel is off so the deleted expert columns can't be restored. The load aborts on any bad row.
 CREATE OR REPLACE TABLE COMMENTS (
   COMMENT_ID          STRING PRIMARY KEY,
@@ -49,9 +49,9 @@ COPY INTO COMMENTS FROM (
   FROM @DATA_STAGE/comments.csv
 ) ON_ERROR = ABORT_STATEMENT;
 
--- GV_SAMPLE: the TEST comments we score, picked by 07_sample.sql (at least 10 per sub-theme + 100 random),
+-- V1_SAMPLE: the TEST comments we score, picked by 07_sample.sql (at least 10 per sub-theme + 100 random),
 -- with why each was picked. Empty until 07_sample.sql runs.
-CREATE TABLE IF NOT EXISTS GV_SAMPLE (
+CREATE TABLE IF NOT EXISTS V1_SAMPLE (
   COMMENT_ID  STRING PRIMARY KEY,
   PICKED_FOR  STRING,
   PICKED_AT   TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
@@ -73,12 +73,12 @@ COPY INTO TAXONOMY FROM (
   SELECT $1::NUMBER, $2, $3, $4, $5, $6::BOOLEAN FROM @DATA_STAGE/taxonomy.csv
 ) ON_ERROR = ABORT_STATEMENT;
 
--- GV_MODEL_CONFIG: one row per setup (model + prompt + role). Switching models means updating a row.
+-- V1_MODEL_CONFIG: one row per setup (model + prompt + role). Switching models means updating a row.
 -- Roles: champion = today's baseline; challenger = setups being tested; panel = models that build the
 -- answer key; judge = the AI Observability judge; sorter = the cheap model that pre-tags all TEST comments
 -- only to pick the sample (its tags are never an answer). Temperature 0 everywhere; APP_VERSION names the
 -- setup in AI Observability.
-CREATE OR REPLACE TABLE GV_MODEL_CONFIG (
+CREATE OR REPLACE TABLE V1_MODEL_CONFIG (
   CONFIG_ID        STRING PRIMARY KEY,
   ROLE             STRING,
   MODEL            STRING,
@@ -88,7 +88,7 @@ CREATE OR REPLACE TABLE GV_MODEL_CONFIG (
   APP_VERSION      STRING
 );
 
-INSERT INTO GV_MODEL_CONFIG
+INSERT INTO V1_MODEL_CONFIG
 SELECT id, role, model, prompt, 'nhs_v7', 0, IFF(prompt IS NULL, NULL, model || '__' || prompt)
 FROM VALUES
   ('C01', 'champion',   'mistral-large3',        'current_v1'),

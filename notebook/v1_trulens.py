@@ -1,8 +1,8 @@
-"""GV_FIRST_PASS: our theme-tagging classifier, wrapped with TruLens so Snowflake AI Observability
+"""V1_FIRST_PASS: our theme-tagging classifier, wrapped with TruLens so Snowflake AI Observability
 records every call (trace, tokens, latency) and the judge can score it.
 
 The app sends exactly the same request as the SQL procedure: it reads the filled prompt and the fixed answer
-format from VOC_EVAL.HARNESS.GV_REQUESTS, and checks the reply with CHECK_ANSWER (retry once). Answers are
+format from VOC_EVAL.HARNESS.V1_REQUESTS, and checks the reply with CHECK_ANSWER (retry once). Answers are
 also saved to RESULTS with SOURCE = 'TRULENS', so SQL scoring is the same for grid and procedure runs.
 """
 import json
@@ -39,7 +39,7 @@ def readable(answer: dict) -> str:
                      for t in tags)
 
 
-# Our own judge metrics (custom, client-side, judged by the J01 judge in GV_MODEL_CONFIG). The built-in
+# Our own judge metrics (custom, client-side, judged by the J01 judge in V1_MODEL_CONFIG). The built-in
 # groundedness and coherence were shown to be unfair to tag lists and short comments (they judge the comment, not
 # the tagging). Each asks the judge for a yes/no verdict per tag; score = share of "yes" tags (0-1), with reasons.
 # The judge gets the same rules the model had: the survey question and the definitions of the tagged sub-themes.
@@ -162,7 +162,7 @@ def _tag_metric(session: Session, judge: str, name: str, prompt_template: str, d
     def score(context: list, output: str):
         if not output or output == "No tags returned.":
             return 0.0, {"reason": "no tags"}
-        # context = [comment, survey question] from GVFirstPass.get_context (flattened in case it is nested).
+        # context = [comment, survey question] from V1FirstPass.get_context (flattened in case it is nested).
         flat = [c for item in (context or []) for c in (item if isinstance(item, list) else [item])]
         comment, question = (flat + ["", ""])[:2]
         prompt = _judge_prompt(prompt_template, definitions, comment, question, output)
@@ -191,20 +191,20 @@ def tag_metrics(session: Session, judge: str, cache: dict = None) -> list:
             _tag_metric(session, judge, "tag_coherence", TAG_COHERENCE_PROMPT, definitions, cache or {})]
 
 
-class GVFirstPass:
+class V1FirstPass:
     """One setup (model + prompt) tagging one comment at a time."""
 
     def __init__(self, session: Session, config_id: str, comment_set: str, repeat: int, run_id: str):
         self.session = session
         self.config_id, self.comment_set, self.repeat, self.run_id = config_id, comment_set, repeat, run_id
         cfg = session.sql(
-            f"SELECT MODEL, PROMPT_VERSION, TEMPERATURE FROM {DB}.GV_MODEL_CONFIG WHERE CONFIG_ID = ?",
+            f"SELECT MODEL, PROMPT_VERSION, TEMPERATURE FROM {DB}.V1_MODEL_CONFIG WHERE CONFIG_ID = ?",
             params=[config_id]).collect()[0]
         self.model, self.prompt_version, self.temperature = cfg[0], cfg[1], float(cfg[2])
         if not re.fullmatch(r"[A-Za-z0-9._-]+", self.model):  # the model must be written into SQL as a literal
             raise ValueError(f"unexpected model name: {self.model}")
         self.questions = {r["COMMENT_ID"]: r["QUESTION"] for r in session.sql(
-            f"SELECT COMMENT_ID, QUESTION FROM {DB}.COMMENTS JOIN {DB}.GV_COMMENT_SETS USING (COMMENT_ID) WHERE COMMENT_SET = ?",
+            f"SELECT COMMENT_ID, QUESTION FROM {DB}.COMMENTS JOIN {DB}.V1_COMMENT_SETS USING (COMMENT_ID) WHERE COMMENT_SET = ?",
             params=[comment_set]).collect()}
         # Answers go to this run's own table first (no lock fights with parallel runs); flush() copies them to RESULTS.
         self.stage = f"{DB}.STG_{re.sub(r'[^A-Za-z0-9_]', '_', run_id).upper()}"
@@ -224,7 +224,7 @@ class GVFirstPass:
             SELECT AI_COMPLETE(model => '{self.model}', prompt => q.PROMPT_FILLED,
                      model_parameters => {{'temperature': {self.temperature}, 'max_tokens': 4096}},
                      response_format => q.RESPONSE_FORMAT, show_details => TRUE)::STRING AS R
-            FROM {DB}.GV_REQUESTS q
+            FROM {DB}.V1_REQUESTS q
             WHERE q.COMMENT_ID = ? AND q.COMMENT_SET = ? AND q.PROMPT_VERSION = ?""",
             params=[comment_id, self.comment_set, self.prompt_version]).collect()[0]
         reply = json.loads(row["R"]) if row["R"] else {}
@@ -236,7 +236,7 @@ class GVFirstPass:
         answer = json.dumps(out["answer"]) if out["answer"] is not None else None
         problems = self.session.sql(f"""
             SELECT {DB}.CHECK_ANSWER(PARSE_JSON(?), c.COMMENT_TEXT, r.ALLOWED_PAIRS)::STRING AS P
-            FROM {DB}.COMMENTS c CROSS JOIN {DB}.GV_RULEBOOK r WHERE c.COMMENT_ID = ?""",
+            FROM {DB}.COMMENTS c CROSS JOIN {DB}.V1_RULEBOOK r WHERE c.COMMENT_ID = ?""",
             params=[answer, comment_id]).collect()[0]["P"]
         run_sql(self.session, f"""
             MERGE INTO {self.stage} t

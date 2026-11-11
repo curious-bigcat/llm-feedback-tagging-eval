@@ -64,7 +64,7 @@ Each step is explained and approved before it runs.
   - `VOC_EVAL.HARNESS`, role `VOC_EVAL_ROLE`
   - the role has `SNOWFLAKE.CORTEX_USER`, `USE AI FUNCTIONS` and `EXECUTE TASK`, and owns the schema, so it can create External Agents and tasks there
 - **Data:** `COMMENTS` and `TAXONOMY`, plus **one checks query** (`sql/02_checks.sql`, 10 checks, all 0 problems). One check confirms no expert-answer columns remain.
-- **Settings table `GV_MODEL_CONFIG`:** one row per setup.
+- **Settings table `V1_MODEL_CONFIG`:** one row per setup.
 
 | Config | Model | Prompt | Role |
 |---|---|---|---|
@@ -84,9 +84,9 @@ Why these models:
   - `current_v1`: simple, like a typical first version
   - `structured_v1`: the six-part structure (task, input, rules, output, safety line, final check)
 - **Shared building blocks**, used by both the SQL procedure and TruLens (`sql/03_shared.sql`):
-  - `GV_RULEBOOK`: rulebook text, allowed pairs and the fixed answer format, all from `TAXONOMY`
-  - `GV_COMMENT_SETS`: which comments each job uses (SAMPLE 404, TRIAL 20)
-  - `GV_REQUESTS`: the exact text sent to the model
+  - `V1_RULEBOOK`: rulebook text, allowed pairs and the fixed answer format, all from `TAXONOMY`
+  - `V1_COMMENT_SETS`: which comments each job uses (SAMPLE 404, TRIAL 20)
+  - `V1_REQUESTS`: the exact text sent to the model
   - `CHECK_ANSWER`: the SQL check. It flags a bad theme/sub-theme pair, a quote not in the comment, a score that doesn't match its label, confidence outside 0–1, or a repeated sub-theme
 - **Procedure `RUN_CLASSIFY(setup, set, repeat)`** (`sql/04_classify.sql`):
   - sends all calls together and checks every answer
@@ -117,11 +117,11 @@ Every decision is saved with who made it and when. **The answer key is final onl
 
 ### Step 5: Register the classifier in AI Observability and run the trial (doc Steps 2 and 5)
 - **Python environment:** TruLens 2.16 is installed in `nhs_eval/.venv` (`trulens-core`, `trulens-connectors-snowflake`, `trulens-providers-cortex`).
-- **The app `GV_FIRST_PASS`:** our classifier wrapped with TruLens, with three traced steps:
+- **The app `V1_FIRST_PASS`:** our classifier wrapped with TruLens, with three traced steps:
   1. **get context:** the comment text, marked as the "retrieval" step so groundedness is checked against it
-  2. **call model:** reads from `GV_REQUESTS`, so it sends the same prompt and answer format as `RUN_CLASSIFY`
+  2. **call model:** reads from `V1_REQUESTS`, so it sends the same prompt and answer format as `RUN_CLASSIFY`
   3. **check:** runs `CHECK_ANSWER`, retries once, and saves to `RESULTS` with `SOURCE = 'TRULENS'`
-- **Registration:** this creates the External Agent `GV_FIRST_PASS`. Each setup is a version, e.g. `mistral-large3__current_v1`.
+- **Registration:** this creates the External Agent `V1_FIRST_PASS`. Each setup is a version, e.g. `mistral-large3__current_v1`.
 - **Trial:** each setup on the 20 TRIAL comments (PRACTICE pile), to check answers come back complete. There's no answer key for TRIAL, so the trial is judged on groundedness, coherence and the SQL checks only.
 
 ### Step 6: Run the test (doc Step 5)
@@ -218,21 +218,21 @@ The decision report is the end point.
   - `05_answer_key.sql`
   - scoring and report scripts to come
 - `prompts/`: `current_v1.txt`, `structured_v1.txt`
-- `notebook/`: `gv_trulens.py` (the TruLens app and our two judge metrics) and `run_eval.py` (registers the app, runs one setup, computes metrics)
+- `notebook/`: `v1_trulens.py` (the TruLens app and our two judge metrics) and `run_eval.py` (registers the app, runs one setup, computes metrics)
 - `app/`: the Streamlit review screen
 - `decision_report.md`: the final result
 
 **Snowflake (`VOC_EVAL.HARNESS`):**
 - **tables:**
-  - `COMMENTS`, `TAXONOMY`, `GV_MODEL_CONFIG`, `PROMPTS`
+  - `COMMENTS`, `TAXONOMY`, `V1_MODEL_CONFIG`, `PROMPTS`
   - `RESULTS`: every AI answer (panel, trial and grid)
   - `RUN_LOG`
   - `REVIEW_QUEUE`
   - `ANSWER_KEY`
-- **views:** `GV_RULEBOOK`, `GV_COMMENT_SETS`, `GV_REQUESTS`
+- **views:** `V1_RULEBOOK`, `V1_COMMENT_SETS`, `V1_REQUESTS`
 - **function:** `CHECK_ANSWER`
 - **procedure:** `RUN_CLASSIFY`
-- **AI Observability:** app `GV_FIRST_PASS` and its runs
+- **AI Observability:** app `V1_FIRST_PASS` and its runs
 - **Streamlit:** the review screen
 
 ## Current status

@@ -1,4 +1,4 @@
-"""GV_TAGGER: the TruLens app the judge scores, for Snowflake Evaluations (AI & ML > Evaluations).
+"""FEEDBACK_TAGGER: the TruLens app the judge scores, for Snowflake Evaluations (AI & ML > Evaluations).
 
 It makes no model calls: every grid answer is already saved in ANSWERS by RUN_MODEL, so tag_comment just replays
 the saved answer for one comment. TruLens records each replay as a record, then the judge (J01 in MODELS) scores it:
@@ -126,7 +126,7 @@ def _tag_metric(name: str, template: str, defs: dict, cache: dict) -> Metric:
     def score(context: list, output: str):
         if not output or output.startswith("No tags returned."):
             return 0.0, {"reason": "no tags"}
-        # context = [comment, survey question] from GVTagger.get_context (flattened in case it is nested).
+        # context = [comment, survey question] from FeedbackTagger.get_context (flattened in case it is nested).
         flat = [c for item in (context or []) for c in (item if isinstance(item, list) else [item])]
         comment, question = (flat + ["", ""])[:2]
         verdicts = cache.get(judge_prompt(template, defs, comment, question, output), [])
@@ -147,7 +147,7 @@ def tag_metrics(session: Session, cache: dict) -> list:
             _tag_metric("tag_coherence", TAG_COHERENCE_PROMPT, defs, cache)]
 
 
-class GVTagger:
+class FeedbackTagger:
     """One run (setup + repeat), replaying its saved answers one comment at a time. SOURCE is the comment table the
     run used: SAMPLE_COMMENTS or FRESH_COMMENTS."""
 

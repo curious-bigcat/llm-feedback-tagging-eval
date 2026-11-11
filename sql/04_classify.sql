@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS RUN_LOG (
   COMPLETION_TOKENS NUMBER
 );
 
--- REVIEW_QUEUE: the to-do list for a person, read and updated by the GV_REVIEW app.
+-- REVIEW_QUEUE: the to-do list for a person, read and updated by the ANSWER_REVIEW app.
 -- REASON = failed_check_twice | panel_split | answer_key_may_be_wrong; STATUS open -> done, with the
 -- decision, who made it and when.
 CREATE TABLE IF NOT EXISTS REVIEW_QUEUE (
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS REVIEW_QUEUE (
 
 -- RUN_CLASSIFY(setup, comment set, repeat): runs one setup over one comment set once, e.g.
 -- CALL RUN_CLASSIFY('P04', 'TRIAL', 1). Several runs can go in parallel with ASYNC / AWAIT ALL.
---   1. reads the model, prompt and temperature from GV_MODEL_CONFIG; re-running a run replaces its rows
+--   1. reads the model, prompt and temperature from V1_MODEL_CONFIG; re-running a run replaces its rows
 --   2. sends one AI_COMPLETE call per comment in a single statement (Snowflake runs them in parallel),
 --      with the fixed answer format, and saves each answer with its CHECK_ANSWER result
 --   3. retries the failed answers once (the retry replaces the first answer)
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS REVIEW_QUEUE (
 --      reviewed as panel splits instead, nor for the sorter, whose tags only pick the sample)
 --   5. logs the run in RUN_LOG
 -- The model name must be a literal in AI_COMPLETE, so the call is built as text and run with EXECUTE
--- IMMEDIATE; the name only ever comes from GV_MODEL_CONFIG.
+-- IMMEDIATE; the name only ever comes from V1_MODEL_CONFIG.
 CREATE OR REPLACE PROCEDURE RUN_CLASSIFY(P_CONFIG_ID STRING, P_COMMENT_SET STRING, P_REPEAT NUMBER)
 RETURNS VARIANT
 LANGUAGE SQL
@@ -94,7 +94,7 @@ DECLARE
   bad_input EXCEPTION (-20001, 'Unknown setup or comment set');
 BEGIN
   SELECT MODEL, PROMPT_VERSION, TEMPERATURE, ROLE INTO :v_model, :v_prompt, :v_temp, :v_role
-    FROM GV_MODEL_CONFIG WHERE CONFIG_ID = :P_CONFIG_ID AND PROMPT_VERSION IS NOT NULL;
+    FROM V1_MODEL_CONFIG WHERE CONFIG_ID = :P_CONFIG_ID AND PROMPT_VERSION IS NOT NULL;
   IF (v_model IS NULL OR P_COMMENT_SET NOT IN ('SAMPLE', 'TEST', 'TRIAL')) THEN
     RAISE bad_input;
   END IF;
@@ -113,11 +113,11 @@ BEGIN
                          ANSWER, PROBLEMS, PROMPT_TOKENS, COMPLETION_TOKENS, SOURCE)
     WITH a AS (
       SELECT q.COMMENT_ID, ' || v_call || ' AS R
-      FROM GV_REQUESTS q WHERE q.COMMENT_SET = ? AND q.PROMPT_VERSION = ?)
+      FROM V1_REQUESTS q WHERE q.COMMENT_SET = ? AND q.PROMPT_VERSION = ?)
     SELECT ?, ?, ?, ?, ?, ?, a.COMMENT_ID, 1, a.R:structured_output[0]:raw_message,
            CHECK_ANSWER(a.R:structured_output[0]:raw_message, c.COMMENT_TEXT, r.ALLOWED_PAIRS),
            a.R:usage:prompt_tokens, a.R:usage:completion_tokens, ''SQL''
-    FROM a JOIN COMMENTS c USING (COMMENT_ID) CROSS JOIN GV_RULEBOOK r'
+    FROM a JOIN COMMENTS c USING (COMMENT_ID) CROSS JOIN V1_RULEBOOK r'
     USING (P_COMMENT_SET, v_prompt, v_run_id, P_CONFIG_ID, v_model, v_prompt, P_COMMENT_SET, P_REPEAT);
 
   -- Attempt 2: only the failed answers, via a temp table named per run so parallel runs don't collide.
@@ -125,13 +125,13 @@ BEGIN
     CREATE OR REPLACE TEMPORARY TABLE ' || v_tmp || ' AS
     WITH a AS (
       SELECT q.COMMENT_ID, ' || v_call || ' AS R
-      FROM GV_REQUESTS q
+      FROM V1_REQUESTS q
       JOIN RESULTS f ON f.COMMENT_ID = q.COMMENT_ID AND f.RUN_ID = ? AND ARRAY_SIZE(f.PROBLEMS) > 0
       WHERE q.COMMENT_SET = ? AND q.PROMPT_VERSION = ?)
     SELECT a.COMMENT_ID, a.R:structured_output[0]:raw_message AS ANSWER,
            CHECK_ANSWER(a.R:structured_output[0]:raw_message, c.COMMENT_TEXT, r.ALLOWED_PAIRS) AS PROBLEMS,
            a.R:usage:prompt_tokens AS PT, a.R:usage:completion_tokens AS CT
-    FROM a JOIN COMMENTS c USING (COMMENT_ID) CROSS JOIN GV_RULEBOOK r'
+    FROM a JOIN COMMENTS c USING (COMMENT_ID) CROSS JOIN V1_RULEBOOK r'
     USING (v_run_id, P_COMMENT_SET, v_prompt);
 
   UPDATE RESULTS f SET ATTEMPT = 2, ANSWER = t.ANSWER, PROBLEMS = t.PROBLEMS,
@@ -150,7 +150,7 @@ BEGIN
     SELECT :v_run_id, :P_CONFIG_ID, :v_model, :v_prompt, p.SHA256, r.TAXONOMY_VERSION, :v_temp, :P_COMMENT_SET, :P_REPEAT,
            'SQL', :v_started, CURRENT_TIMESTAMP(), COUNT(*), COUNT_IF(ARRAY_SIZE(f.PROBLEMS) = 0), :v_retried, :v_review,
            SUM(f.PROMPT_TOKENS), SUM(f.COMPLETION_TOKENS)
-    FROM RESULTS f CROSS JOIN PROMPTS p CROSS JOIN GV_RULEBOOK r
+    FROM RESULTS f CROSS JOIN PROMPTS p CROSS JOIN V1_RULEBOOK r
     WHERE f.RUN_ID = :v_run_id AND p.PROMPT_VERSION = :v_prompt
     GROUP BY p.SHA256, r.TAXONOMY_VERSION;
 
@@ -160,18 +160,18 @@ $$;
 
 -- One warehouse per setup (created by ACCOUNTADMIN; usage granted to VOC_EVAL_ROLE), so no run waits for another.
 -- X-Small is enough because the calls mostly wait on the model; up to 3 clusters so the 3 repeats each get one.
--- VOC_GV_PANEL runs the 4 panel models.
--- CREATE WAREHOUSE VOC_GV_C01 WAREHOUSE_SIZE = 'XSMALL' MIN_CLUSTER_COUNT = 1 MAX_CLUSTER_COUNT = 3
+-- VOC_EVAL_PANEL runs the 4 panel models.
+-- CREATE WAREHOUSE VOC_EVAL_C01 WAREHOUSE_SIZE = 'XSMALL' MIN_CLUSTER_COUNT = 1 MAX_CLUSTER_COUNT = 3
 --   AUTO_SUSPEND = 60 AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE;   (likewise C02..C08 and PANEL)
--- GRANT USAGE, OPERATE, MONITOR ON WAREHOUSE VOC_GV_C01 TO ROLE VOC_EVAL_ROLE;
+-- GRANT USAGE, OPERATE, MONITOR ON WAREHOUSE VOC_EVAL_C01 TO ROLE VOC_EVAL_ROLE;
 
 -- Grid tasks: one per setup, on its own warehouse, running its 3 repeats at the same time (ASYNC / AWAIT ALL).
 EXECUTE IMMEDIATE $$
 DECLARE
-  c CURSOR FOR SELECT CONFIG_ID FROM GV_MODEL_CONFIG WHERE ROLE IN ('champion', 'challenger') ORDER BY 1;
+  c CURSOR FOR SELECT CONFIG_ID FROM V1_MODEL_CONFIG WHERE ROLE IN ('champion', 'challenger') ORDER BY 1;
 BEGIN
   FOR r IN c DO
-    EXECUTE IMMEDIATE 'CREATE OR REPLACE TASK GV_CLASSIFY_' || r.CONFIG_ID || ' WAREHOUSE = VOC_GV_' || r.CONFIG_ID ||
+    EXECUTE IMMEDIATE 'CREATE OR REPLACE TASK V1_CLASSIFY_' || r.CONFIG_ID || ' WAREHOUSE = VOC_EVAL_' || r.CONFIG_ID ||
       ' USER_TASK_TIMEOUT_MS = 14400000 AS BEGIN ' ||
       'ASYNC (CALL RUN_CLASSIFY(''' || r.CONFIG_ID || ''', ''SAMPLE'', 1)); ' ||
       'ASYNC (CALL RUN_CLASSIFY(''' || r.CONFIG_ID || ''', ''SAMPLE'', 2)); ' ||
@@ -182,4 +182,4 @@ BEGIN
 END;
 $$;
 
--- Start the grid: EXECUTE TASK GV_CLASSIFY_C01; ... EXECUTE TASK GV_CLASSIFY_C08;
+-- Start the grid: EXECUTE TASK V1_CLASSIFY_C01; ... EXECUTE TASK V1_CLASSIFY_C08;

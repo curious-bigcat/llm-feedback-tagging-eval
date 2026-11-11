@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS ANSWERS (
   CREATED_AT    TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
 );
 
--- REVIEW_QUEUE: comments for a person to decide in the GV_REVIEW app. REASON = panel_split (the panel disagreed)
+-- REVIEW_QUEUE: comments for a person to decide in the ANSWER_REVIEW app. REASON = panel_split (the panel disagreed)
 -- or failed_check (a tested model's answer failed the checks twice). STATUS open -> done.
 CREATE TABLE IF NOT EXISTS REVIEW_QUEUE (
   ITEM_ID     NUMBER AUTOINCREMENT,

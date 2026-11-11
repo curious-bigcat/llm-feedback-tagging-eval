@@ -185,7 +185,7 @@
     <text x="568" y="712">CHECK_ANSWER checks</text>
     <text x="568" y="732">every answer</text>
     <text x="568" y="760">Review app (Streamlit):</text>
-    <text x="568" y="780">GV_REVIEW</text>
+    <text x="568" y="780">ANSWER_REVIEW</text>
     <text x="568" y="808" font-family="Menlo, monospace" font-size="15" fill="#11567F">ANSWER_KEY</text>
     <text x="568" y="842" font-weight="700" fill="#11567F">Models (panel)</text>
     <text x="568" y="864">Claude Haiku 4.5</text>
@@ -205,7 +205,7 @@
     <text x="824" y="896">Gemini 3.1 Pro</text>
     <!-- 4 -->
     <text x="1080" y="692">Snowflake Evaluations</text>
-    <text x="1080" y="712">(TruLens), app GV_TAGGER</text>
+    <text x="1080" y="712">(TruLens), app FEEDBACK_TAGGER</text>
     <text x="1080" y="740">Replays saved answers,</text>
     <text x="1080" y="760">no new model calls;</text>
     <text x="1080" y="780">judge prompts sent in</text>

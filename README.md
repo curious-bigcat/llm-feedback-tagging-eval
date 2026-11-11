@@ -163,7 +163,7 @@ all 3 repeats for only 39% of comments.
    goes from 2.92 to 2.21 tags per comment, precision 0.51 -> 0.65, F1 0.65 -> 0.74 and consistency 39% -> 58% with
    no model change. Gemini 3.1 Pro stays best on every tag measure with any prompt.
 
-**Step 8 judge** (Claude Sonnet 4.6 in Snowflake Evaluations, app `GV_TAGGER`; averages of 3 repeats; correctness
+**Step 8 judge** (Claude Sonnet 4.6 in Snowflake Evaluations, app `FEEDBACK_TAGGER`; averages of 3 repeats; correctness
 range in brackets). Ran in 2 waves with 3 judge runs per warehouse (a 20-comment test with 12 runs on one warehouse
 lost 3 runs to upload collisions):
 
@@ -283,7 +283,7 @@ The answer key says what the correct tags, sentiment and impact are for each sam
    - 137 comments `DECIDED_BY = needs_review`: sent to the review queue (all since decided by a person, step 4);
      70 of them because the panel's impact ratings were too far apart
 
-## Step 4: Human review of undecided answers (GV_REVIEW app)
+## Step 4: Human review of undecided answers (ANSWER_REVIEW app)
 
 The panel can't settle every comment. A person decides the rest, so the answer key never rests on a 2-2 vote.
 
@@ -293,7 +293,7 @@ The panel can't settle every comment. A person decides the rest, so the answer k
 - fewer than 3 models agreeing on the sentiment
 - impact ratings more than 1 point apart
 
-**What you see** (open in Snowsight: **Projects > Streamlit > GV_REVIEW**), one comment at a time:
+**What you see** (open in Snowsight: **Projects > Streamlit > ANSWER_REVIEW**), one comment at a time:
 1. the survey question and the comment
 2. **Agreed by the panel:** tags 3 or more models gave (kept unless you remove them)
 3. **Only 2 of 4 models chose these. Keep them?** one tick-box per split tag
@@ -332,7 +332,7 @@ queued (`REASON = failed_check`), so a person can see why.
 ## Step 5: Test grid
 
 Each setup tags the 209 sample comments 3 times (to check consistency), with `RUN_MODEL(setup, repeat)`. Each setup
-runs on its own warehouse (`VOC_GV_C01`..`C08`) with its 3 repeats at the same time, so all 24 runs go in
+runs on its own warehouse (`VOC_EVAL_C01`..`C08`) with its 3 repeats at the same time, so all 24 runs go in
 parallel. Run ids look like `C04_r2`. Took about 15 minutes (Gemini 3.1 Pro was slowest).
 
 | | Current prompt | Structured prompt (v2) | Structured prompt v3 (v3 run, anti-over-tagging) |
@@ -368,7 +368,7 @@ The 491 answers still failing were queued as `failed_check` for optional review;
 ## Step 6: Judge (`sql/judge.sql`, `notebook/judge_app.py`)
 
 The judge, **Claude Sonnet 4.6** (`J01` in `MODELS`), scores every grid answer in **Snowflake Evaluations**
-(Snowsight > AI & ML > Evaluations > `GV_TAGGER`), using Snowflake's TruLens build.
+(Snowsight > AI & ML > Evaluations > `FEEDBACK_TAGGER`), using Snowflake's TruLens build.
 
 How: `JUDGE_RUN(setup, repeat, limit)` creates one TruLens run per grid run (e.g. `C04_r2`). It replays that run's
 saved answers from `ANSWERS` (no model calls), then the judge scores each answer on:
@@ -632,11 +632,11 @@ map-reduce does not degrade.
 | View | `AUDIT_ROWS`, `AUDIT_SCORES` | Step 10b: the person's blind answers vs the panel's key (`sql/audit.sql`) |
 | Function | `CHECK_ANSWER`, `NORM_QUOTE` | The automatic answer checks and quote matching |
 | View | `RUN_TAGS`, `TAG_PROFILE`, `TAG_SCORES`, `TAG_SCORES_BY_SUBTHEME`, `TAG_CONSISTENCY` | Plain-SQL tag accuracy: tags per comment, precision, recall, F1, over-tagging (`sql/tag_scores.sql`) |
-| Streamlit | `GV_REVIEW` | Review app: panel disagreements, and the blind audit (step 10b) |
-| Evaluations app | `GV_TAGGER` | The judge's runs and scores (created by TruLens): 36 full v3 runs, 6 fresh-comment runs (`*_fresh_r*`), and `*_test20` test runs |
+| Streamlit | `ANSWER_REVIEW` | Review app: panel disagreements, and the blind audit (step 10b) |
+| Evaluations app | `FEEDBACK_TAGGER` | The judge's runs and scores (created by TruLens). New runs go here. The 36 full v3 runs, 6 fresh-comment runs and the `*_test20` runs were recorded under the app's earlier name, which is kept because Snowflake cannot rename an Evaluations app (`ALTER EXTERNAL AGENT` has no rename) and recreating it would lose the runs |
 | Stage | `DATA_STAGE` | Uploaded data, prompts, scripts and app files |
 
-Warehouses: `VOC_GV_PANEL` (panel runs), `VOC_GV_C01`..`VOC_GV_C08` (one per grid setup), `DEMO_WH` (app).
+Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one per grid setup), `DEMO_WH` (app).
 
 ## Files
 
@@ -666,9 +666,9 @@ Warehouses: `VOC_GV_PANEL` (panel runs), `VOC_GV_C01`..`VOC_GV_C08` (one per gri
 | `prompts/report_judge_v2.txt`, `prompts/report_consistency_v2.txt` | Aggregation A5: the judge's instructions |
 | `reports/patient_transport_report.md` | Aggregation A6: the example finished report (numbers from `REPORT_SV`, text by map-reduce) |
 | `notebook/judge_app.py` | Step 6: the TruLens app (replays answers) and the two custom judge metrics |
-| `app/streamlit_app.py`, `app/environment.yml` | The GV_REVIEW app |
+| `app/streamlit_app.py`, `app/environment.yml` | The ANSWER_REVIEW app |
 | `prep.py`, `make_label_map.py` | Earlier data-prep scripts (built `data/*.csv` from the NHS source files); kept for the record, not used by the current pipeline |
-| `notebook/run_eval.py`, `notebook/gv_trulens.py` | Earlier laptop-based TruLens runner and app (before `judge.sql` / `judge_app.py`); kept for the record, not used now |
+| `notebook/run_eval.py`, `notebook/v1_trulens.py` | Earlier laptop-based TruLens runner and app (before `judge.sql` / `judge_app.py`); kept for the record, not used now |
 | `split.py`, `PLAN.md`, `rules.md` | Earlier sample split script, plan and labelling rules; kept for the record, not used now |
 | `sql/00_admin.sql` .. `sql/07_sample.sql` | Earlier numbered SQL pipeline (before `setup.sql`, `sample.sql`, `answer_key.sql`, `judge.sql`); kept for the record, not used now |
 | `judge_bundle/judge.ipynb`, `judge_bundle/requirements.txt` | Earlier notebook version of the judge; kept for the record, not used now |
@@ -680,7 +680,7 @@ Warehouses: `VOC_GV_PANEL` (panel runs), `VOC_GV_C01`..`VOC_GV_C08` (one per gri
 2. Create and load `COMMENTS` and `TAXONOMY` from the CSVs.
 3. Run `sample.sql` (about 3 credits), then `setup.sql`.
 4. Run the panel: `CALL RUN_MODEL('P01', 1)` .. `('P04', 1)` (in parallel, about 2 minutes).
-5. Run `answer_key.sql`, then a person reviews the undecided comments in GV_REVIEW (step 4).
+5. Run `answer_key.sql`, then a person reviews the undecided comments in ANSWER_REVIEW (step 4).
 6. Grid: `CALL RUN_MODEL('C01', 1)` .. `('C08', 3)`, one task per setup on its own warehouse.
 7. Upload `notebook/judge_app.py` to `@DATA_STAGE/notebook/`, run `judge.sql`, then `CALL JUDGE_RUN('C01', 1, 0)` ..
    `('C08', 3, 0)` (one task per run; try `limit = 20` first).

@@ -44,13 +44,13 @@ BEGIN
     SELECT f.COMMENT_ID, f.MODEL, f.ANSWER
     FROM RESULTS f
     JOIN RUN_LOG l USING (RUN_ID)
-    JOIN GV_MODEL_CONFIG g ON g.CONFIG_ID = l.CONFIG_ID
+    JOIN V1_MODEL_CONFIG g ON g.CONFIG_ID = l.CONFIG_ID
     WHERE g.ROLE = 'panel' AND l.COMMENT_SET = 'SAMPLE' AND l.REPEAT_NO = 1
   ),
   tags AS (
     SELECT p.COMMENT_ID, p.MODEL, t.value:theme::STRING AS THEME, t.value:sub_theme::STRING AS SUB_THEME,
            MAX(t.value:confidence_score::FLOAT) AS CONF
-    FROM panel p, LATERAL FLATTEN(p.ANSWER:tags) t, GV_RULEBOOK r
+    FROM panel p, LATERAL FLATTEN(p.ANSWER:tags) t, V1_RULEBOOK r
     WHERE ARRAY_CONTAINS((t.value:theme::STRING || ' > ' || t.value:sub_theme::STRING)::VARIANT, r.ALLOWED_PAIRS)
     GROUP BY 1, 2, 3, 4
   ),

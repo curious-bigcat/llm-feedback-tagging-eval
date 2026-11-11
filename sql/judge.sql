@@ -1,4 +1,4 @@
--- judge.sql : step 6, the judge scores every grid answer in Snowflake Evaluations (AI & ML > Evaluations > GV_TAGGER).
+-- judge.sql : step 6, the judge scores every grid answer in Snowflake Evaluations (AI & ML > Evaluations > FEEDBACK_TAGGER).
 -- JUDGE_RUN(setup, repeat, limit) creates a TruLens run (e.g. 'C04_r2'), replays that grid run's saved answers from
 -- ANSWERS (no model calls), and has the judge (J01 in MODELS) score them: tag_groundedness and tag_coherence (ours,
 -- client-side) and correctness against ANSWER_KEY - tags, sentiment and impact (built-in, server-side).
@@ -36,7 +36,7 @@ from trulens.connectors.snowflake import SnowflakeConnector
 from trulens.connectors.snowflake import otel_exporter
 from trulens.core.run import RunConfig
 
-from judge_app import DB, GVTagger, prefetch_verdicts, tag_metrics
+from judge_app import DB, FeedbackTagger, prefetch_verdicts, tag_metrics
 
 TERMINAL = {"INVOCATION_COMPLETED", "INVOCATION_PARTIALLY_COMPLETED", "FAILED", "CANCELLED"}
 
@@ -89,13 +89,13 @@ def run(session, model_id, repeat, limit, source="SAMPLE_COMMENTS"):
                 "RECORD_ROOT.GROUND_TRUTH_OUTPUT": "GROUND_TRUTH"}
     label = "FRESH" if fresh else "SAMPLE"
 
-    app = GVTagger(session, run_id, source)
+    app = FeedbackTagger(session, run_id, source)
     # The 3 repeats of a setup start together and race to register the same app version ("already exists");
     # on a retry the version is found and reused. One connector only: TruLens refuses a second one in a session.
     connector = SnowflakeConnector(snowpark_session=session)
     for attempt in range(5):
         try:
-            tru_app = TruApp(app, app_name="GV_TAGGER", app_version=version,
+            tru_app = TruApp(app, app_name="FEEDBACK_TAGGER", app_version=version,
                              connector=connector, main_method=app.tag_comment)
             break
         except Exception as e:

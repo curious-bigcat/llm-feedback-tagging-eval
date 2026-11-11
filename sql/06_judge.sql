@@ -1,20 +1,20 @@
 -- Step 5 scoring inside Snowflake, with Snowflake's own TruLens build (Anaconda channel, 2.7).
--- TruLens 2.7 can only save client-side scores for a run it created in the same session, so GV_JUDGE_RUN creates a
+-- TruLens 2.7 can only save client-side scores for a run it created in the same session, so V1_JUDGE_RUN creates a
 -- new TruLens run (e.g. 'C01_SAMPLE_r1_t'), replays it over the 404 SAMPLE comments and then computes the judge's
--- metrics. Replay makes no model calls: GVFirstPass.tag_comment reuses each answer RUN_CLASSIFY saved in RESULTS.
--- Results appear in Snowsight > AI & ML > Evaluations > GV_FIRST_PASS.
+-- metrics. Replay makes no model calls: V1FirstPass.tag_comment reuses each answer RUN_CLASSIFY saved in RESULTS.
+-- Results appear in Snowsight > AI & ML > Evaluations > V1_FIRST_PASS.
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
 
--- Each judge run uses its setup's own warehouse (VOC_GV_C01..C08, see 04_classify.sql), so runs don't compete.
+-- Each judge run uses its setup's own warehouse (VOC_EVAL_C01..C08, see 04_classify.sql), so runs don't compete.
 
--- GV_JUDGE_RUN: e.g. CALL GV_JUDGE_RUN('C01', 'SAMPLE', 1, '_t'). Uses the J01 judge from GV_MODEL_CONFIG.
-CREATE OR REPLACE PROCEDURE GV_JUDGE_RUN(P_CONFIG_ID STRING, P_COMMENT_SET STRING, P_REPEAT INT, P_SUFFIX STRING)
+-- V1_JUDGE_RUN: e.g. CALL V1_JUDGE_RUN('C01', 'SAMPLE', 1, '_t'). Uses the J01 judge from V1_MODEL_CONFIG.
+CREATE OR REPLACE PROCEDURE V1_JUDGE_RUN(P_CONFIG_ID STRING, P_COMMENT_SET STRING, P_REPEAT INT, P_SUFFIX STRING)
 RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
 PACKAGES = ('snowflake-snowpark-python', 'trulens-core', 'trulens-connectors-snowflake', 'trulens-providers-cortex')
-IMPORTS = ('@VOC_EVAL.HARNESS.DATA_STAGE/notebook/gv_trulens.py')
+IMPORTS = ('@VOC_EVAL.HARNESS.DATA_STAGE/notebook/v1_trulens.py')
 HANDLER = 'run'
 EXECUTE AS CALLER
 AS
@@ -34,7 +34,7 @@ from trulens.connectors.snowflake import SnowflakeConnector
 from trulens.connectors.snowflake import otel_exporter
 from trulens.core.run import RunConfig
 
-from gv_trulens import DB, GVFirstPass, tag_metrics
+from v1_trulens import DB, V1FirstPass, tag_metrics
 
 TERMINAL = {"INVOCATION_COMPLETED", "INVOCATION_PARTIALLY_COMPLETED", "FAILED", "CANCELLED"}
 
@@ -60,8 +60,8 @@ def patch_record_count(count):
 def run(session, config_id, comment_set, repeat, suffix, limit):
     session.use_database("VOC_EVAL")
     session.use_schema("HARNESS")
-    judge = session.sql(f"SELECT MODEL FROM {DB}.GV_MODEL_CONFIG WHERE ROLE = 'judge'").collect()[0][0]
-    version = session.sql(f"SELECT APP_VERSION FROM {DB}.GV_MODEL_CONFIG WHERE CONFIG_ID = ?",
+    judge = session.sql(f"SELECT MODEL FROM {DB}.V1_MODEL_CONFIG WHERE ROLE = 'judge'").collect()[0][0]
+    version = session.sql(f"SELECT APP_VERSION FROM {DB}.V1_MODEL_CONFIG WHERE CONFIG_ID = ?",
                           params=[config_id]).collect()[0][0]
     results_id = f"{config_id}_{comment_set}_r{repeat}"  # the RUN_CLASSIFY run whose saved answers are replayed
     run_name = results_id + suffix
@@ -71,7 +71,7 @@ def run(session, config_id, comment_set, repeat, suffix, limit):
     df = session.sql(f"""
         SELECT c.COMMENT_ID, c.COMMENT_TEXT,
                {"OBJECT_CONSTRUCT('tags', k.TAGS, 'sentiment', k.SENTIMENT)::STRING" if with_key else "NULL"} AS GROUND_TRUTH
-        FROM {DB}.GV_COMMENT_SETS s JOIN {DB}.COMMENTS c USING (COMMENT_ID)
+        FROM {DB}.V1_COMMENT_SETS s JOIN {DB}.COMMENTS c USING (COMMENT_ID)
         {"JOIN " + DB + ".ANSWER_KEY k USING (COMMENT_ID)" if with_key else ""}
         WHERE s.COMMENT_SET = ? {"AND k.SOURCE <> 'needs_review'" if limit and with_key else ""}
         {"QUALIFY ROW_NUMBER() OVER (ORDER BY SHA2('nhs_eval_v1|judge_test|' || c.COMMENT_ID)) <= " + str(int(limit))
@@ -81,13 +81,13 @@ def run(session, config_id, comment_set, repeat, suffix, limit):
     if with_key:
         spec["RECORD_ROOT.GROUND_TRUTH_OUTPUT"] = "GROUND_TRUTH"
 
-    app = GVFirstPass(session, config_id, comment_set, repeat, results_id)
+    app = V1FirstPass(session, config_id, comment_set, repeat, results_id)
     # The 3 repeats of a setup start together and race to register the same app version ("already exists");
     # on a retry the version is found and reused. One connector only: TruLens refuses a second one in a session.
     connector = SnowflakeConnector(snowpark_session=session)
     for attempt in range(5):
         try:
-            tru_app = TruApp(app, app_name="GV_FIRST_PASS", app_version=version,
+            tru_app = TruApp(app, app_name="V1_FIRST_PASS", app_version=version,
                              connector=connector, main_method=app.tag_comment)
             break
         except Exception as e:
@@ -131,12 +131,12 @@ $$;
 -- One task per grid run (8 setups x 3 repeats), each on its setup's warehouse, so all 24 score in parallel.
 EXECUTE IMMEDIATE $$
 DECLARE
-  c CURSOR FOR SELECT CONFIG_ID FROM GV_MODEL_CONFIG WHERE ROLE IN ('champion', 'challenger') ORDER BY 1;
+  c CURSOR FOR SELECT CONFIG_ID FROM V1_MODEL_CONFIG WHERE ROLE IN ('champion', 'challenger') ORDER BY 1;
 BEGIN
   FOR r IN c DO
     FOR rep IN 1 TO 3 DO
-      EXECUTE IMMEDIATE 'CREATE OR REPLACE TASK GV_JUDGE_' || r.CONFIG_ID || '_R' || rep ||
-        ' WAREHOUSE = VOC_GV_' || r.CONFIG_ID || ' USER_TASK_TIMEOUT_MS = 86400000 AS CALL GV_JUDGE_RUN(''' ||
+      EXECUTE IMMEDIATE 'CREATE OR REPLACE TASK V1_JUDGE_' || r.CONFIG_ID || '_R' || rep ||
+        ' WAREHOUSE = VOC_EVAL_' || r.CONFIG_ID || ' USER_TASK_TIMEOUT_MS = 86400000 AS CALL V1_JUDGE_RUN(''' ||
         r.CONFIG_ID || ''', ''SAMPLE'', ' || rep || ', ''_t'')';
     END FOR;
   END FOR;
@@ -144,4 +144,4 @@ BEGIN
 END;
 $$;
 
--- Start one (test) or all: EXECUTE TASK GV_JUDGE_C01_R1;
+-- Start one (test) or all: EXECUTE TASK V1_JUDGE_C01_R1;
