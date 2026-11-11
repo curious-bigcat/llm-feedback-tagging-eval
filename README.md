@@ -163,7 +163,7 @@ all 3 repeats for only 39% of comments.
    goes from 2.92 to 2.21 tags per comment, precision 0.51 -> 0.65, F1 0.65 -> 0.74 and consistency 39% -> 58% with
    no model change. Gemini 3.1 Pro stays best on every tag measure with any prompt.
 
-**Step 8 judge** (Claude Sonnet 4.6 in Snowflake Evaluations, app `FEEDBACK_TAGGER`; averages of 3 repeats; correctness
+**Step 8 judge** (Claude Sonnet 4.6 in Snowflake Evaluations; every score is saved in table `JUDGE_SCORES`; averages of 3 repeats; correctness
 range in brackets). Ran in 2 waves with 3 judge runs per warehouse (a 20-comment test with 12 runs on one warehouse
 lost 3 runs to upload collisions):
 
@@ -368,7 +368,8 @@ The 491 answers still failing were queued as `failed_check` for optional review;
 ## Step 6: Judge (`sql/judge.sql`, `notebook/judge_app.py`)
 
 The judge, **Claude Sonnet 4.6** (`J01` in `MODELS`), scores every grid answer in **Snowflake Evaluations**
-(Snowsight > AI & ML > Evaluations > `FEEDBACK_TAGGER`), using Snowflake's TruLens build.
+(Snowsight > AI & ML > Evaluations > `FEEDBACK_TAGGER` for new runs), using Snowflake's TruLens build. The v3
+scores, with the judge's reason for each, are in table `JUDGE_SCORES`.
 
 How: `JUDGE_RUN(setup, repeat, limit)` creates one TruLens run per grid run (e.g. `C04_r2`). It replays that run's
 saved answers from `ANSWERS` (no model calls), then the judge scores each answer on:
@@ -633,7 +634,8 @@ map-reduce does not degrade.
 | Function | `CHECK_ANSWER`, `NORM_QUOTE` | The automatic answer checks and quote matching |
 | View | `RUN_TAGS`, `TAG_PROFILE`, `TAG_SCORES`, `TAG_SCORES_BY_SUBTHEME`, `TAG_CONSISTENCY` | Plain-SQL tag accuracy: tags per comment, precision, recall, F1, over-tagging (`sql/tag_scores.sql`) |
 | Streamlit | `ANSWER_REVIEW` | Review app: panel disagreements, and the blind audit (step 10b) |
-| Evaluations app | `FEEDBACK_TAGGER` | The judge's runs and scores (created by TruLens). New runs go here. The 36 full v3 runs, 6 fresh-comment runs and the `*_test20` runs were recorded under the app's earlier name, which is kept because Snowflake cannot rename an Evaluations app (`ALTER EXTERNAL AGENT` has no rename) and recreating it would lose the runs |
+| Evaluations app | `FEEDBACK_TAGGER` | Where new judge runs are recorded (created by TruLens on the next `JUDGE_RUN`) |
+| Table | `JUDGE_SCORES` | Every judge score from the v3 runs, one row per score with its reason: 36 full runs (22,344 scores), 6 fresh-comment runs (1,200), 34 test runs. Copied from the earlier Evaluations app before it was replaced by `FEEDBACK_TAGGER` |
 | Stage | `DATA_STAGE` | Uploaded data, prompts, scripts and app files |
 
 Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one per grid setup), `DEMO_WH` (app).
