@@ -297,6 +297,25 @@ evidence, different results between runs, fragmented or inconsistent evidence qu
 **Writers:** Mistral Large 3 (today's model), Gemini 3.1 Pro (the tagging winner), GPT-5.4 (cheaper strong option);
 3 runs each. **Judge:** Claude Sonnet 4.6 (not a writer).
 
+**Finished report:** [`reports/forensic_report.md`](reports/forensic_report.md), with the Gemini vs Mistral comparison
+at the end.
+
+### Approach: SQL does the counting and grouping, the AI only writes
+
+1. **Map (SQL):** every comment of the service is tagged once by the winner; each tag gives theme, sub-theme,
+   sentiment and an evidence quote. Two tables: one row per comment (`SERVICE_ANSWERS`), one row per comment x
+   sub-theme (`SERVICE_TAGS`, invalid pairs dropped, a sub-theme given twice kept once).
+2. **Count (semantic view):** `SERVICE_SV` defines every number once: comments, % negative, % positive, high impact,
+   by theme and sub-theme, with `COUNT(DISTINCT COMMENT_ID)` so no comment is double counted. Checked against plain SQL.
+3. **Reduce and concatenate (SQL):** nested `LISTAGG` builds one document: service -> theme -> sub-theme -> comment ->
+   the tag's sentiment and evidence, with the semantic-view counts on each heading, biggest groups first.
+4. **Write (AI, one call):** the writer reads the document and returns JSON (overview, a summary per theme, a summary
+   and 1-2 quotes per sub-theme with 5+ comments). It must not write numbers and must copy quotes word for word.
+5. **Lay out (SQL):** `SERVICE_FINAL_REPORT` puts the semantic-view numbers and the writer's text together into
+   markdown. The AI never touches a number.
+6. **Check:** SQL checks coverage against `SERVICE_EXPECTED`, quotes against the comments, and digits in the text; the
+   judge checks each section's claims against that section's comments, and compares the 3 runs.
+
 | Step | What | How | Cost (about) |
 |---|---|---|---|
 | R1. Tag the service | All 669 comments tagged once by the winner (C09) | `sql/service.sql` builds `SERVICE_COMMENTS`; `RUN_MODEL('C09', 1, 'SERVICE_COMMENTS')` -> run `C09_svc_r1` | 13 |
@@ -307,7 +326,7 @@ evidence, different results between runs, fragmented or inconsistent evidence qu
 
 **Run it:** `service.sql`, `RUN_MODEL('C09', 1, 'SERVICE_COMMENTS')`, `service_tags.sql`, `service_reports.sql`, then
 `CALL RUN_SERVICE_REPORT('<writer>', 1..3)` for each writer (one task per writer), then `service_scores.sql`; read
-`SELECT * FROM SERVICE_SCORES`.
+`SELECT * FROM SERVICE_SCORES`. Then `service_final.sql` and `SELECT REPORT FROM SERVICE_FINAL_REPORT`.
 
 ### Results (Forensic, 669 comments, 9 reports)
 
@@ -374,6 +393,7 @@ faithful but needs that check, as it skips sections. Credits for this phase are 
 | Procedure | `RUN_SERVICE_REPORT(writer, repeat)` | One report by one writer into `SERVICE_REPORTS` |
 | Table / view | `SERVICE_REPORTS`, `SERVICE_JUDGE`, `SERVICE_CONSISTENCY`, `SERVICE_SCORES` | The 9 reports and their scores |
 | Function | `SOFT_QUOTE` | Quote matching that ignores quote marks and end punctuation |
+| View | `SERVICE_FINAL_REPORT` | The finished report as markdown (numbers from `SERVICE_SV`, text from one writer) |
 
 Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (grid runs), `DEMO_WH` (app).
 
@@ -398,6 +418,7 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (grid 
 | `sql/service.sql`, `sql/service_tags.sql` | Aggregation R1-R3: the service's comments, the tables, `SERVICE_SV` and the document |
 | `sql/service_reports.sql`, `prompts/service_report_v1.txt` | R4: `RUN_SERVICE_REPORT` and the report instruction |
 | `sql/service_scores.sql`, `prompts/service_judge_v1.txt`, `prompts/service_consistency_v1.txt` | R5: scores and the two judge instructions |
+| `sql/service_final.sql`, `reports/forensic_report.md` | The finished report: semantic-view numbers + Gemini text, and the Gemini vs Mistral comparison |
 
 ## Rebuild from scratch
 
