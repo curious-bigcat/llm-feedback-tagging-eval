@@ -17,9 +17,8 @@ impact, instead of today's setup (Mistral Large 3 with the current prompt)?
 - **Mid-price: GPT-5.4 with the v3 prompt (C11):** the same judge correctness as C09 (2.60) at a third of its cost
   (6.6 credits per 1,000), but it over-tags more (2.13 tags per comment, precision 0.67).
 
-Date: 9 Nov 2026. All work ran in Snowflake (`VOC_EVAL.HARNESS`); details in `README.md`. This is the third run (v3):
-a fresh, step-by-step rerun that adds plain-SQL tag-accuracy checks (precision, recall, F1, over-tagging) after an
-aggregation trial showed that wrong tags distort the reports built from them.
+Date: 9 Nov 2026. All work ran in Snowflake (`VOC_EVAL.HARNESS`); details in `README.md`. Tag accuracy is measured
+with plain-SQL precision, recall and F1 against an answer key, plus an independent AI judge.
 
 ---
 
