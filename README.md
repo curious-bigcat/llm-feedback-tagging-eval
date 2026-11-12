@@ -195,8 +195,7 @@ for every model.
 | 4 | Significant distress, a delay in care or a failure of service |
 | 5 | Harm or a risk to safety (serious neglect, a fall, a safeguarding concern) |
 
-The same definition is in both prompts (`prompts/current_v2.txt`, `prompts/structured_v2.txt`). The v1 prompts and the v1
-results (no impact) are kept only as files; Snowflake holds the v2 run.
+The same definition is in both prompts (`prompts/current_v2.txt`, `prompts/structured_v2.txt`).
 
 ---
 
@@ -468,7 +467,7 @@ panel's answer, to see how often the panel was right.
 |---|---|---|
 | Table | `COMMENTS`, `TAXONOMY` | Raw data |
 | Table | `SAMPLE_COMMENTS` | The 207 test comments (v3) |
-| Table | `PROMPTS` | Every prompt file in `prompts/` (tagging `current_v2`, `structured_v2`, `structured_v3`; v1 files), with a SHA-256 fingerprint |
+| Table | `PROMPTS` | Every prompt file in `prompts/` (tagging `current_v2`, `structured_v2`, `structured_v3`), with a SHA-256 fingerprint |
 | Table | `MODELS` | Every model setup: id, role, model, prompt |
 | View | `RULEBOOK` | Taxonomy text for prompts, the 33 valid pairs, the fixed answer format (tags + impact) |
 | Table | `ANSWERS` | Every model answer, with its check result |
@@ -497,7 +496,6 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one p
 | `data/comments.csv`, `data/taxonomy.csv` | Raw data |
 | `prompts/current_v2.txt`, `prompts/structured_v2.txt` | The two prompts being compared (with the impact rule) |
 | `prompts/structured_v3.txt` | `structured_v2` + a rule against over-tagging (setup C09) |
-| `prompts/current_v1.txt`, `prompts/structured_v1.txt` | The first-run prompts (no impact), kept for the record |
 | `sql/sample.sql` | Step 2: builds `SAMPLE_COMMENTS` |
 | `sql/setup.sql` | Prompts, models, rulebook, checks, answers table, review queue, `RUN_MODEL` |
 | `sql/answer_key.sql` | Step 3: builds `ANSWER_KEY` from the panel and queues disagreements |
@@ -507,11 +505,6 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one p
 | `sql/audit.sql` | Step 10b: queues the 30 blind-audit items and creates `AUDIT_ROWS`, `AUDIT_SCORES` |
 | `notebook/judge_app.py` | Step 6: the TruLens app (replays answers) and the two custom judge metrics |
 | `app/streamlit_app.py`, `app/environment.yml` | The ANSWER_REVIEW app |
-| `prep.py`, `make_label_map.py` | Earlier data-prep scripts (built `data/*.csv` from the NHS source files); kept for the record, not used by the current pipeline |
-| `notebook/run_eval.py`, `notebook/v1_trulens.py` | Earlier laptop-based TruLens runner and app (before `judge.sql` / `judge_app.py`); kept for the record, not used now |
-| `split.py`, `PLAN.md`, `rules.md` | Earlier sample split script, plan and labelling rules; kept for the record, not used now |
-| `sql/00_admin.sql` .. `sql/07_sample.sql` | Earlier numbered SQL pipeline (before `setup.sql`, `sample.sql`, `answer_key.sql`, `judge.sql`); kept for the record, not used now |
-| `judge_bundle/judge.ipynb`, `judge_bundle/requirements.txt` | Earlier notebook version of the judge; kept for the record, not used now |
 
 ## Rebuild from scratch
 

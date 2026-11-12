@@ -3,9 +3,9 @@
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
 
--- PROMPTS: the prompt files, each read whole (current_v1, structured_v1, current_v2, structured_v2), with a SHA-256 fingerprint so
--- we can prove which text was used. Each has {TAXONOMY}, {QUESTION} and {COMMENT} slots. The v2 prompts add the
--- impact rating (1-5) and are the ones used now; v1 is kept as the record of the first evaluation.
+-- PROMPTS: the prompt files, each read whole (current_v2, structured_v2, structured_v3), with a SHA-256 fingerprint so
+-- we can prove which text was used. Each has {TAXONOMY}, {QUESTION} and {COMMENT} slots and asks for the impact
+-- rating (1-5); structured_v3 adds the rule against over-tagging.
 CREATE FILE FORMAT IF NOT EXISTS WHOLE_FILE_FMT TYPE = CSV FIELD_DELIMITER = NONE RECORD_DELIMITER = NONE ESCAPE_UNENCLOSED_FIELD = NONE;
 CREATE OR REPLACE TABLE PROMPTS AS
 SELECT REPLACE(SPLIT_PART(METADATA$FILENAME, '/', -1), '.txt', '') AS PROMPT,
