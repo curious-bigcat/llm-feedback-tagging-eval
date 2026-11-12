@@ -297,7 +297,7 @@ evidence, different results between runs, fragmented or inconsistent evidence qu
 **Writers:** Mistral Large 3 (today's model), Gemini 3.1 Pro (the tagging winner), GPT-5.4 (cheaper strong option);
 3 runs each. **Judge:** Claude Sonnet 4.6 (not a writer).
 
-**Finished report:** [`reports/forensic_report.md`](reports/forensic_report.md), with the Gemini vs Mistral comparison
+**Finished report:** [`reports/service_report.md`](reports/service_report.md), with the Gemini vs Mistral comparison
 at the end.
 
 ### Approach: SQL does the counting and grouping, the AI only writes
@@ -418,7 +418,7 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (grid 
 | `sql/service.sql`, `sql/service_tags.sql` | Aggregation R1-R3: the service's comments, the tables, `SERVICE_SV` and the document |
 | `sql/service_reports.sql`, `prompts/service_report_v1.txt` | R4: `RUN_SERVICE_REPORT` and the report instruction |
 | `sql/service_scores.sql`, `prompts/service_judge_v1.txt`, `prompts/service_consistency_v1.txt` | R5: scores and the two judge instructions |
-| `sql/service_final.sql`, `reports/forensic_report.md` | The finished report: semantic-view numbers + Gemini text, and the Gemini vs Mistral comparison |
+| `sql/service_final.sql`, `reports/service_report.md` | The finished report: semantic-view numbers + Gemini text, and the Gemini vs Mistral comparison |
 
 ## Rebuild from scratch
 

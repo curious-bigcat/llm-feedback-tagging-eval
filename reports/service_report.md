@@ -1,6 +1,6 @@
-# Patient feedback report: Forensic
+# Service patient feedback report
 
-*669 comments ("What was good?" 344, "What could we do better?" 325); 39 with high impact (4-5). Numbers from the semantic view SERVICE_SV; text written by gemini-3.1-pro (run 1).*
+*Service: Forensic. 669 comments ("What was good?" 344, "What could we do better?" 325); 39 with high impact (4-5). Numbers from the semantic view SERVICE_SV; text written by gemini-3.1-pro (run 1).*
 
 ## Overview
 

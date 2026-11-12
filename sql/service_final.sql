@@ -40,8 +40,8 @@ tbl AS (
                  || ROUND(100 * POSITIVE_COMMENTS / COMMENTS) || '% |', '\n') WITHIN GROUP (ORDER BY COMMENTS DESC) AS T
   FROM th),
 ov AS (SELECT SUMMARY FROM r WHERE LEVEL = 'overview')
-SELECT '# Patient feedback report: ' || sv.SERVICE || '\n\n'
-       || '*' || sv.ALL_COMMENTS || ' comments (' || qs.Q || '); ' || sv.HIGH_IMPACT_COMMENTS
+SELECT '# Service patient feedback report\n\n'
+       || '*Service: ' || sv.SERVICE || '. ' || sv.ALL_COMMENTS || ' comments (' || qs.Q || '); ' || sv.HIGH_IMPACT_COMMENTS
        || ' with high impact (4-5). Numbers from the semantic view SERVICE_SV; text written by '
        || pick.WRITER || ' (run ' || pick.REPEAT_NO || ').*\n\n'
        || '## Overview\n\n' || ov.SUMMARY || '\n\n'
