@@ -1,9 +1,0 @@
-You are comparing two versions of the same section of a patient-feedback report, written from the same comments.
-
-VERSION 1
-{A}
-
-VERSION 2
-{B}
-
-Score agreement from 0 to 1: 1 = the same main problems and praise in the same order of importance; 0.5 = about half of the main points match; 0 = different main points. Ignore wording and quote choice.

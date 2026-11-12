@@ -5,8 +5,8 @@
 --   TAG_SCORES_BY_SUBTHEME : the same per sub-theme, to see which sub-themes are over-used or missed.
 --   TAG_CONSISTENCY : per setup and comment set, the share of comments given the same sub-themes in every repeat.
 -- Only valid taxonomy pairs count; a sub-theme given twice in one answer counts once. Fresh-comment runs (step 10a,
--- e.g. 'C09_fresh_r1') and report-slice runs ('C09_report_r1') have no answer key, so TAG_SCORES and
--- TAG_SCORES_BY_SUBTHEME keep only sample runs (run ids like 'C09_r1').
+-- e.g. 'C09_fresh_r1') have no answer key, so TAG_SCORES and TAG_SCORES_BY_SUBTHEME keep only sample runs
+-- (run ids like 'C09_r1').
 USE ROLE VOC_EVAL_ROLE;
 USE SCHEMA VOC_EVAL.HARNESS;
 
@@ -90,12 +90,11 @@ FROM runs r CROSS JOIN TAXONOMY s
 LEFT JOIN given g ON g.RUN_ID = r.RUN_ID AND g.SUB_THEME = s.SUB_THEME
 LEFT JOIN in_key i ON i.SUB_THEME = s.SUB_THEME;
 
--- TAG_CONSISTENCY: per setup and comment set (SAMPLE, FRESH or REPORT), how many repeats it has and the share of
--- comments with the identical set of sub-themes in every repeat (an answer with no valid tag counts as the empty set).
+-- TAG_CONSISTENCY: per setup and comment set (SAMPLE or FRESH), how many repeats it has and the share of comments
+-- with the identical set of sub-themes in every repeat (an answer with no valid tag counts as the empty set).
 CREATE OR REPLACE VIEW TAG_CONSISTENCY AS
 WITH per_answer AS (
-  SELECT a.MODEL_ID, CASE WHEN CONTAINS(a.RUN_ID, '_fresh_') THEN 'FRESH' WHEN CONTAINS(a.RUN_ID, '_report_') THEN 'REPORT'
-                          ELSE 'SAMPLE' END AS COMMENT_SET, a.RUN_ID, a.COMMENT_ID,
+  SELECT a.MODEL_ID, IFF(CONTAINS(a.RUN_ID, '_fresh_'), 'FRESH', 'SAMPLE') AS COMMENT_SET, a.RUN_ID, a.COMMENT_ID,
          COALESCE(LISTAGG(t.SUB_THEME, '|') WITHIN GROUP (ORDER BY t.SUB_THEME), '') AS TAG_SET
   FROM ANSWERS a LEFT JOIN RUN_TAGS t USING (RUN_ID, COMMENT_ID)
   GROUP BY 1, 2, 3, 4),

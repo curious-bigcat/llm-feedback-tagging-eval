@@ -5,12 +5,6 @@ most accurately, treating the data like real customer feedback (text only, no la
 
 Everything runs in Snowflake: database `VOC_EVAL`, schema `HARNESS`, role `VOC_EVAL_ROLE`.
 
-**Aggregation result (reports):** build the numbers from a semantic view (`REPORT_SV`: exact counts, each comment
-once per theme) and the text by **map-reduce** (one call per theme, then the overview), on the winner's tags:
-faithfulness 0.98, coverage 0.85, consistency 0.74, ahead of one big prompt and `AI_AGG`. Today's tags inflate every
-theme's count (Communication 60 comments vs 20). Example: `reports/patient_transport_report.md`; details in
-`decision_report.md` section 7 and "Expanding beyond Patient Transport" below.
-
 **Result (v3, current):** switch from today's setup (Mistral Large 3, current prompt) to **Gemini 3.1 Pro with the
 structured v3 prompt (C09)**: top precision (0.75) and groundedness/coherence (0.85), the right number of tags (1.89
 per comment vs the key's 1.69), valid for 205 of 207 comments and by far the most consistent (same tags in all 3 runs
@@ -31,13 +25,7 @@ The v2 Snowflake results were cleared for the fresh start; its numbers stay in t
 
 ## The approach at a glance
 
-**Tagging (which model and prompt):**
-
 ![Evaluation approach](evaluation_approach.png)
-
-**Reports (how to aggregate the tags):**
-
-![Aggregation approach](aggregation_approach.png)
 
 ---
 
@@ -47,7 +35,7 @@ The v2 Snowflake results were cleared for the fresh start; its numbers stay in t
 
 | Step | Status |
 |---|---|
-| 0. Roll back the paused aggregation trial | Done: objects removed, files parked in `legacy/aggregation/` |
+| 0. Roll back the paused aggregation trial | Done: objects removed |
 | 1. Fresh start | Done: result tables and Evaluations runs cleared; `COMMENTS`, `TAXONOMY` and setup kept |
 | 2. Pick a test sample | Done: **207 comments** (every sub-theme 10+ except Parking 3; every impact level 17+) |
 | 3. Panel + over-tagging check | Done: 4 models, 1.8-2.3 tags per comment, none over-tagging (see below) |
@@ -214,8 +202,7 @@ results (no impact) are kept only as files; Snowflake holds the v2 run.
 
 > **Steps 1-7 below describe the method as first run in v2** (209-comment sample, 72 + 137 answer key, 8 setups,
 > winner C08). v3 repeated the same method with a 207-comment sample, a 67 + 140 key, 12 setups and the tag-accuracy
-> checks; its numbers are in "Where we are" above and in `decision_report.md`. Step 10 and the aggregation steps
-> (A1-A6) are v3 only.
+> checks; its numbers are in "Where we are" above and in `decision_report.md`. Step 10 is v3 only.
 
 ## Step 1: Load the raw data
 
@@ -465,141 +452,6 @@ supported by the comment. The winner did as well as before; today's setup was st
 a blind spot-check of the answer key: a person tags 30 comments the AI panel decided on its own, without seeing the
 panel's answer, to see how often the panel was right.
 
-## Next: aggregation (plan)
-
-**The problem:** the monthly report is built from many tagged comments: how many people raised each theme, whether
-it was good or bad, and a short summary with example quotes. Today one big prompt writes it. In our earlier trial
-that prompt covered only 1 of 10 themes, repeated some and sometimes returned nothing, and wrong tags inflated the
-counts. Now that the tags are good, we test the report step on its own.
-
-**Steps:**
-
-| Step | What | How | Cost (about) |
-|---|---|---|---|
-| A1. Pick a report slice | One service, like one monthly report: 500 comments from patient transport (NEAS PTS, 1,423 comments, 2 questions: what was good / what to improve), by fixed hash | SQL | 0 |
-| A2. Tag the slice | With the winner (C09) and today's setup (C01), once each, to show how tag quality changes the report | `RUN_MODEL(..., 'REPORT_COMMENTS')`, runs `C09_report_r1`, `C01_report_r1` | 12 |
-| A3. Counts | One row per comment x tag (`REPORT_TAGS`) and a **semantic view** (`REPORT_SV`) defining comments, % of comments, sentiment split and impact per theme / sub-theme; a comment counts once per theme even with 2 sub-themes in it. Checked once against plain SQL | Semantic view, no AI: exact and free | 0 |
-| A4. Write the summaries | Numbers from `REPORT_SV`; text by (1) one big prompt with all comments (today); (2) map-reduce: one short summary per theme from that theme's comments, then joined; (3) `AI_AGG` per theme. Optional (4): a Cortex Agent with the semantic view + a search service over the comments. 3 repeats each, on both tag sets | AI_COMPLETE / AI_AGG / agent | 10-25 |
-| A5. Score each report | Covers every theme with 10+ comments; every number matches the SQL counts; every quote is real; no claim the comments do not support (judge); same themes in all 3 repeats | SQL checks + the judge | 5-10 |
-| A6. Decide | Best method and model for reports, with cost | Write-up in README and `decision_report.md` | 0 |
-
-**Rules kept from the trial (`legacy/aggregation/`):** numbers always come from SQL and are put into the report, never
-counted by the AI; the AI writes words only. We expect map-reduce or `AI_AGG` to beat the one big prompt on coverage
-and repeatability; the test shows by how much and at what cost.
-
-**Total:** about 25-40 credits; no person review needed except a final read of the winning report.
-
-**Progress:**
-- **A1 done** (`sql/report.sql`): `REPORT_COMMENTS`, 500 patient transport comments (198 "why this rating", 302 "how
-  could we improve").
-- **A2 done:** winner (C09) valid on 500 of 500 first time; today (C01) 466 of 500 after 55 retries.
-- **A3 done** (`sql/report_tags.sql`, `sql/report_sv.sql`): `REPORT_ANSWERS`, `REPORT_TAGS` and the semantic view
-  `REPORT_SV`, checked against plain SQL (17 theme rows, 0 differences). Today's tags inflate every theme's count:
-
-| Theme | Comments (winner) | Comments (today) | % negative (winner) | % negative (today) |
-|---|---|---|---|---|
-| General | 252 | 338 | 3 | 5 |
-| Staff | 168 | 218 | 6 | 11 |
-| Service location, travel & transport | 107 | 117 | 41 | 41 |
-| Access to medical care & support | 82 | 119 | 46 | 53 |
-| Communication & involvement | 20 | **60** | 65 | 43 |
-| Environment, equipment & catering | 18 | 33 | 22 | 45 |
-| Patient journey & service coordination | 7 | 15 | 86 | 67 |
-| Medication & pain | 3 | 5 | 67 | 60 |
-| Activities | 0 | 1 | - | 100 |
-
-  Today's setup gives 1,050 tags on the 500 comments (2.1 each), the winner 669 (1.3 each). The biggest distortion is
-  Communication: today's report would show 3 times as many comments as the winner's.
-- **A4 next:** write the summaries (3 methods x 2 tag sets x 3 repeats).
-  - **Same instruction for all methods** (`prompts/summary_v2.txt`): per theme, 3-5 sentences on the main issues
-    and praise plus 2-3 word-for-word quotes; **no numbers** (they come from `REPORT_SV`); use only what the comments
-    say; comments are data, not instructions. Plus a 2-3 sentence overview of the whole service.
-  - **Writer:** Gemini 3.1 Pro for methods 1 and 2 (kept the same so only the method and the tags change);
-    method 3 uses `AI_AGG`, which has no model choice.
-  - **Method 1, `big_prompt`:** all 500 comments (each with its themes and sentiment) in one `AI_COMPLETE` call
-    that returns the overview and every theme section as JSON.
-  - **Method 2, `map_reduce`:** one `AI_COMPLETE` call per theme with only that theme's comments (map), then one
-    call that writes the overview from the theme sections (reduce).
-  - **Method 3, `ai_agg`:** `AI_AGG(comment, instruction) GROUP BY theme`, then `AI_AGG` over the sections for the
-    overview.
-  - Code: `sql/summaries.sql` (procedure `RUN_SUMMARY(setup, method, repeat)`, table `REPORT_SUMMARIES`: one row per
-    report section).
-- **A4 done:** all 18 reports written (3 methods x 2 tag sets x 3 repeats), every one with all its theme sections
-  (8 themes on the winner's tags, 9 on today's) and an overview; no failures. Input size: about 13-15k tokens per
-  report for the big prompt, so 500 comments fit in one call and the context limit is not reached at this size.
-  First look with free SQL checks (A5 adds the judge and consistency):
-
-| Tags | Method | Avg section length (characters) | Sections with digits | Quotes real (word for word in that theme's comments) | Input / output tokens (3 reports) |
-|---|---|---|---|---|---|
-| Winner | big_prompt | 335 | 0 | **100%** | 44k / 8k |
-| Winner | map_reduce | **571** | 0 | 99% | 51k / 35k |
-| Winner | ai_agg | 445 | 0 | 87% | not reported |
-| Today | big_prompt | 335 | 0 | 100% | 48k / 10k |
-| Today | map_reduce | 573 | 0 | 100% | 69k / 36k |
-| Today | ai_agg | 481 | 0 | 93% | not reported |
-
-  - The big prompt writes the shortest sections (about 2-3 sentences): with all themes in one answer, each theme
-    gets less room. In run 1 its overview missed the carers-not-allowed-to-travel issue that map-reduce found.
-  - `AI_AGG` changes some quotes: 7-13% are not word for word in the comments.
-  - No method wrote numbers into the text.
-- **A5 next:** score the reports (coverage of main points, faithfulness by the judge, consistency across the 3
-  repeats, cost). Code: `sql/report_scores.sql`; judge Claude Sonnet 4.6 (not a writer), temperature 0.
-  - **Faithfulness** (`prompts/report_judge_v2.txt`): the judge splits each section into claims and marks each one
-    supported or not by that theme's comments (the overview: by all comments). Score = share supported.
-  - **Coverage** (same call): the top 3 sub-themes of each theme by comment count from `REPORT_SV` (3+ comments; for
-    the overview the top 3 themes other than General). Score = share the section mentions.
-  - **Consistency** (`prompts/report_consistency_v2.txt`): the judge lists the main points across the 3 runs of a
-    section and marks which runs make each. Score = share of points made in all 3 runs.
-  - Tables `REPORT_TOPICS`, `REPORT_JUDGE`, `REPORT_CONSISTENCY`; view `REPORT_SCORES` (one row per tag set x
-    method, with the A4 SQL checks).
-- **A5 done.** The judge returned an empty reply for 9 sections of one small theme ("Patient journey & service
-  coordination", too few comments for key topics) because the answer format required a topics list; topics were made
-  optional and those 9 re-judged. 2 of 218 sections still have no score (left out of averages).
-
-| Tags | Method | Faithful (sections) | Faithful (overview) | Coverage of key sub-themes | Same points in all 3 runs (sections) | Same points (overview) | Quotes real | Writer tokens in / out per report |
-|---|---|---|---|---|---|---|---|---|
-| Winner | **map_reduce** | **0.98** | 0.96 | **0.85** | **0.74** | 0.55 | 99% | 17k / 12k |
-| Winner | big_prompt | 0.91 | 1.00 | 0.78 | 0.54 | 0.67 | 100% | 15k / 3k |
-| Winner | ai_agg | 0.94 | 0.91 | 0.67 | 0.49 | 0.40 | 87% | not reported |
-| Today | map_reduce | 0.89 | 0.97 | 0.78 | 0.74 | 0.67 | 100% | 23k / 12k |
-| Today | big_prompt | 0.84 | 0.96 | 0.68 | 0.62 | 0.36 | 100% | 16k / 3k |
-| Today | ai_agg | 0.86 | 0.80 | 0.69 | 0.49 | 0.40 | 93% | not reported |
-
-  - **Map-reduce is best** on faithfulness, coverage and section consistency, with both tag sets. It costs about
-    4 times the writer output tokens of the big prompt (it writes longer, more detailed sections).
-  - **Better tags give better reports with every method:** faithfulness 0.89-0.98 on the winner's tags vs 0.84-0.89 on
-    today's, and higher coverage. The same writer, method and instruction - only the tags differ.
-  - **The big prompt** writes short sections and misses more key sub-themes; it is the least consistent on today's
-    tags.
-  - **`AI_AGG`** has the lowest coverage and consistency and changes some quotes.
-  - **Overviews are the least consistent part with every method (0.36-0.67):** 2-3 sentences leave room to pick
-    different points each run.
-  - Most unsupported claims are about **how common** something is ("some" or "many" for something one or two
-    comments say), not invented facts.
-  - Credits so far (usage history, partly filled in): about 3 for the judge, about 9 for Gemini (tagging + writing),
-    about 2 for Mistral, 0.3 for `AI_AGG`.
-- **A6 done:** decision in `decision_report.md` section 7: **numbers from the semantic view, text by map-reduce, on
-  the winner's tags.** Example finished report: `reports/patient_transport_report.md` (numbers from `REPORT_SV`, text
-  from map-reduce run 1, word for word).
-
-## Expanding beyond Patient Transport
-
-The test covered one service (500 of its 1,423 comments). The same pieces work for every service and for an
-organisation-wide annual report. What changes, step by step:
-
-| Step | What to change | Where | Cost (about) |
-|---|---|---|---|
-| 1. Comments in scope | Drop the service filter and the 500 limit, or pass the service as a parameter. Add `SERVICE`, `TRUST` and a real date: `DATE_RAW` is text in mixed formats (`01/02/2022`, `9/30/2022`), so parse it with `COALESCE(TRY_TO_DATE(DATE_RAW, 'DD/MM/YYYY'), TRY_TO_DATE(DATE_RAW, 'MM/DD/YYYY'))` and check the ambiguous days by hand | `sql/report.sql` (`REPORT_COMMENTS`) | 0 |
-| 2. Tag once, keep the tags | Tag every comment once with the winner (C09) and keep the answers; next month tag only the new comments (a stream + task on `COMMENTS`). Re-tagging unchanged comments costs credits and produces different answers for the same comment | `RUN_MODEL(..., 'REPORT_COMMENTS')`, split into parts on several warehouses | ~120 for all 6,211 (19.5 per 1,000), then only new comments |
-| 3. Numbers | Add `SERVICE`, `TRUST` and `MONTH` to `REPORT_ANSWERS` and as dimensions in `REPORT_SV`. The same metrics then give counts per service, per month, or for the whole organisation, each comment still counted once per theme | `sql/report_tags.sql`, `sql/report_sv.sql` | 0 |
-| 4. Service reports | Map-reduce per service: one call per service x theme (`GROUP BY SERVICE, THEME` instead of `THEME`), then one overview per service. The size of each call stays the size of one service's theme, however many services there are | `RUN_SUMMARY` in `sql/summaries.sql` | ~1-2 per service report |
-| 5. Organisation / annual report | Map-reduce one level up: each organisation theme section is written from the **service sections** for that theme (not from raw comments), then the overview from the organisation sections. Monthly sections can be rolled up into quarterly and yearly ones the same way. No call ever sees a year of raw comments, which removes the context-limit problem | new method in `RUN_SUMMARY` | small: inputs are sections, not comments |
-| 6. Checks | Run the same A5 scores on a sample of each new report (faithfulness, coverage, consistency), and the free SQL checks on all of them (quotes word for word, no numbers in the text) | `sql/report_scores.sql`, parameterised by report | ~0.5 per report judged |
-
-**Before relying on step 5,** run the scale test still to do: the big prompt and map-reduce at growing input sizes
-(500, 1,500, 3,000 and all 6,211 comments), to find where one big prompt stops covering every theme and to show that
-map-reduce does not degrade.
-
 ## Checks not done yet (options)
 
 - **Answer-key audit:** under way as step 10b (30 blind items in the review app).
@@ -616,7 +468,7 @@ map-reduce does not degrade.
 |---|---|---|
 | Table | `COMMENTS`, `TAXONOMY` | Raw data |
 | Table | `SAMPLE_COMMENTS` | The 207 test comments (v3) |
-| Table | `PROMPTS` | Every prompt file in `prompts/` (tagging `current_v2`, `structured_v2`, `structured_v3`; report `summary_v2`, `report_judge_v2`, `report_consistency_v2`; v1 files), with a SHA-256 fingerprint |
+| Table | `PROMPTS` | Every prompt file in `prompts/` (tagging `current_v2`, `structured_v2`, `structured_v3`; v1 files), with a SHA-256 fingerprint |
 | Table | `MODELS` | Every model setup: id, role, model, prompt |
 | View | `RULEBOOK` | Taxonomy text for prompts, the 33 valid pairs, the fixed answer format (tags + impact) |
 | Table | `ANSWERS` | Every model answer, with its check result |
@@ -625,11 +477,6 @@ map-reduce does not degrade.
 | Procedure | `RUN_MODEL(model_id, repeat [, source])` | Runs one model over the sample, e.g. `CALL RUN_MODEL('P01', 1)`; source `'FRESH_COMMENTS'` for step 10a |
 | Procedure | `JUDGE_RUN(model_id, repeat, limit [, source])` | Judges one run in Snowflake Evaluations, e.g. `CALL JUDGE_RUN('C04', 2, 0)`; with `'FRESH_COMMENTS'`, tag scores only |
 | Table | `FRESH_COMMENTS` | Step 10a: 100 comments from the 20% of people kept aside (`sql/fresh.sql`) |
-| Table | `REPORT_COMMENTS`, `REPORT_ANSWERS`, `REPORT_TAGS` | Aggregation A1-A3: the 500-comment patient transport slice, and its answers and tags per setup |
-| Semantic view | `REPORT_SV` | Aggregation A3: the report's numbers (comments, sentiment, impact per theme / sub-theme), defined once (`sql/report_sv.sql`) |
-| Table / view | `REPORT_SUMMARIES`, `REPORT_THEME_LINES`, `REPORT_COMMENT_LINES` | Aggregation A4: the 18 written reports (one row per section) and their inputs |
-| Table / view | `REPORT_TOPICS`, `REPORT_JUDGE`, `REPORT_CONSISTENCY`, `REPORT_SCORES` | Aggregation A5: the report scores |
-| Procedure | `RUN_SUMMARY(setup, method, repeat)` | Aggregation A4: writes one report, e.g. `CALL RUN_SUMMARY('C09', 'map_reduce', 1)` |
 | View | `AUDIT_ROWS`, `AUDIT_SCORES` | Step 10b: the person's blind answers vs the panel's key (`sql/audit.sql`) |
 | Function | `CHECK_ANSWER`, `NORM_QUOTE` | The automatic answer checks and quote matching |
 | View | `RUN_TAGS`, `TAG_PROFILE`, `TAG_SCORES`, `TAG_SCORES_BY_SUBTHEME`, `TAG_CONSISTENCY` | Plain-SQL tag accuracy: tags per comment, precision, recall, F1, over-tagging (`sql/tag_scores.sql`) |
@@ -644,10 +491,9 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one p
 
 | File | What it does |
 |---|---|
-| `decision_report.md` | The v3 results, recommendation and costs (sections 1-6), and the aggregation decision (section 7) |
+| `decision_report.md` | The v3 results, recommendation and costs |
 | `evaluation_approach.png` | One-page diagram of the tagging evaluation (v3): the data, the 5 steps (logic, how it ran in Snowflake, AI models used) and today vs. winner |
-| `aggregation_approach.png` | One-page diagram of the report test (A1-A6): slice, tagging, semantic view, the 3 writing methods, scores and the decision |
-| `evaluation_approach.svg`, `aggregation_approach.svg` | Editable sources of the diagrams (open in a browser, Figma or Illustrator) |
+| `evaluation_approach.svg` | Editable source of the diagram (open in a browser, Figma or Illustrator) |
 | `data/comments.csv`, `data/taxonomy.csv` | Raw data |
 | `prompts/current_v2.txt`, `prompts/structured_v2.txt` | The two prompts being compared (with the impact rule) |
 | `prompts/structured_v3.txt` | `structured_v2` + a rule against over-tagging (setup C09) |
@@ -659,14 +505,6 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one p
 | `sql/tag_scores.sql` | Tag-accuracy views: `TAG_PROFILE` (tags per comment), `TAG_SCORES` (precision, recall, F1, over/under-tagging), `TAG_SCORES_BY_SUBTHEME`, `TAG_CONSISTENCY` (same tags in every repeat) |
 | `sql/fresh.sql` | Step 10a: builds `FRESH_COMMENTS` |
 | `sql/audit.sql` | Step 10b: queues the 30 blind-audit items and creates `AUDIT_ROWS`, `AUDIT_SCORES` |
-| `sql/report.sql` | Aggregation A1: builds `REPORT_COMMENTS` |
-| `sql/report_tags.sql` | Aggregation A3: builds `REPORT_ANSWERS` and `REPORT_TAGS` from the report runs |
-| `sql/report_sv.sql` | Aggregation A3: the semantic view `REPORT_SV`, with a check against plain SQL |
-| `sql/summaries.sql` | Aggregation A4: input views `REPORT_THEME_LINES`, `REPORT_COMMENT_LINES`, table `REPORT_SUMMARIES`, procedure `RUN_SUMMARY` (big_prompt, map_reduce, ai_agg) |
-| `prompts/summary_v2.txt` | Aggregation A4: the instruction every summary method uses |
-| `sql/report_scores.sql` | Aggregation A5: `REPORT_TOPICS`, `REPORT_JUDGE` (faithfulness, coverage), `REPORT_CONSISTENCY`, view `REPORT_SCORES` |
-| `prompts/report_judge_v2.txt`, `prompts/report_consistency_v2.txt` | Aggregation A5: the judge's instructions |
-| `reports/patient_transport_report.md` | Aggregation A6: the example finished report (numbers from `REPORT_SV`, text by map-reduce) |
 | `notebook/judge_app.py` | Step 6: the TruLens app (replays answers) and the two custom judge metrics |
 | `app/streamlit_app.py`, `app/environment.yml` | The ANSWER_REVIEW app |
 | `prep.py`, `make_label_map.py` | Earlier data-prep scripts (built `data/*.csv` from the NHS source files); kept for the record, not used by the current pipeline |
@@ -674,7 +512,6 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (one p
 | `split.py`, `PLAN.md`, `rules.md` | Earlier sample split script, plan and labelling rules; kept for the record, not used now |
 | `sql/00_admin.sql` .. `sql/07_sample.sql` | Earlier numbered SQL pipeline (before `setup.sql`, `sample.sql`, `answer_key.sql`, `judge.sql`); kept for the record, not used now |
 | `judge_bundle/judge.ipynb`, `judge_bundle/requirements.txt` | Earlier notebook version of the judge; kept for the record, not used now |
-| `legacy/aggregation/` | Paused aggregation test (report counts, summaries by one prompt / map-reduce / AI_AGG, report scoring); to resume after the tagging rework |
 
 ## Rebuild from scratch
 
