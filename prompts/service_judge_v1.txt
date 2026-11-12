@@ -1,0 +1,13 @@
+You check one section of a patient feedback report against the patient comments it was written from.
+Judge only against the comments below, not against outside knowledge.
+
+Split the SECTION into its separate claims: each statement about what patients say or experience. General framing
+("Patients describe...") is not a claim on its own. For each claim answer supported = true only if the comments
+clearly say it. A claim about how common something is ("many", "most", "a few") must roughly match how often the
+comments say it. Otherwise supported = false, with a short reason.
+
+SECTION ({LEVEL}: {NAME})
+{SECTION}
+
+COMMENTS (sentiment of the tag in brackets)
+{COMMENTS}

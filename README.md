@@ -287,6 +287,65 @@ panel (precision, recall, F1, exact match, sentiment and impact agreement). **St
 
 ---
 
+## Aggregation: building the report for one service
+
+**Goal:** test how a service report should be built from the tagged comments, and check the customer's reporting
+challenges: large inputs hitting the context limit, the answer being too long to cover every theme with its
+evidence, different results between runs, fragmented or inconsistent evidence quotes, and double counting.
+
+**Service:** Forensic, all 669 comments (one real report: realistic size and mix).
+**Writers:** Mistral Large 3 (today's model), Gemini 3.1 Pro (the tagging winner), GPT-5.4 (cheaper strong option);
+3 runs each. **Judge:** Claude Sonnet 4.6 (not a writer).
+
+| Step | What | How | Cost (about) |
+|---|---|---|---|
+| R1. Tag the service | All 669 comments tagged once by the winner (C09) | `sql/service.sql` builds `SERVICE_COMMENTS`; `RUN_MODEL('C09', 1, 'SERVICE_COMMENTS')` -> run `C09_svc_r1` | 13 |
+| R2. Counts | One row per comment and per tag; semantic view `SERVICE_SV` gives every count and % (each comment once per theme) | SQL, no AI | 0 |
+| R3. Concatenate | One document nested **service -> theme -> sub-theme -> comment -> the tag's sentiment and evidence quote**, with the counts from `SERVICE_SV` beside each group | SQL only (`LISTAGG`) | 0 |
+| R4. Write the report | The same instruction on that document, one call per writer, 3 runs each (9 reports); numbers are not written by the AI | `AI_COMPLETE` | 5-15 |
+| R5. Score | Coverage of the expected sections, faithfulness and consistency (judge), quotes word for word and no numbers in the text (SQL), input size vs context | `sql/service_scores.sql` -> `SERVICE_JUDGE`, `SERVICE_CONSISTENCY`, view `SERVICE_SCORES` | 5-10 |
+
+**Run it:** `service.sql`, `RUN_MODEL('C09', 1, 'SERVICE_COMMENTS')`, `service_tags.sql`, `service_reports.sql`, then
+`CALL RUN_SERVICE_REPORT('<writer>', 1..3)` for each writer (one task per writer), then `service_scores.sql`; read
+`SELECT * FROM SERVICE_SCORES`.
+
+### Results (Forensic, 669 comments, 9 reports)
+
+R1: 669 comments tagged, 667 passed the checks (12 after a retry). R2: the semantic view and plain SQL agree on all
+28 sub-theme counts. R3: the document is about 37k tokens; a complete report needs 9 theme sections and the 24
+sub-themes with 5+ comments.
+
+| Score (average of 3 runs) | Mistral Large 3 | Gemini 3.1 Pro | GPT-5.4 |
+|---|---|---|---|
+| Theme sections written (of 9) | 9 | 9 | 9 |
+| Sub-theme sections written (of 24) | 20 (17-22) | **24 every run** | 21.3 (20-22) |
+| Other sub-theme sections per run (fewer than 5 comments, or a name not in that list) | 2 | 0 | 0 |
+| Same sub-theme sections in all 3 runs | no | **yes** | no |
+| Faithful: overview / themes / sub-themes (share of claims the comments support) | 1.00 / 0.91 / 0.86 | 0.94 / 0.83 / 0.86 | 0.97 / **0.98 / 0.91** |
+| Consistent: overview / themes (share of main points made in all 3 runs) | 0.78 / 0.41 | 0.46 / 0.50 | 0.44 / 0.62 |
+| Quotes word for word in a comment of that sub-theme | 90% (some words changed) | **100%** | **100%** |
+| Numbers written by the AI | 0 (1 "COVID-19") | 0 (2 "COVID-19") | 0 |
+| Input / output tokens per report | 39k / 3.5k | 40k / 4.6k | 37k / 2.9k |
+
+**The customer's challenges, one by one:**
+- **Context limit:** not a problem for one service: about 40k input tokens fit all 3 writers. All 6,211 comments in
+  one document would be about 9 times bigger (roughly 350k tokens), so a report stays one service (or one theme) per call.
+- **Answer too long to cover the hierarchy and evidence:** this is the real problem. No report hit the 8,192-token
+  answer limit (largest 5.1k), yet Mistral and GPT still skipped sub-themes (up to 7 of 24): the model chooses to
+  stop, so "it has room" does not mean "it covers everything". Only Gemini wrote every section in every run.
+- **Different results between runs:** even at temperature 0, only about half of the main points of a theme appear
+  in all 3 runs, and only Gemini wrote the same sections each time. The text varies; the structure and numbers must
+  not, which is why both come from SQL.
+- **Fragmented or inconsistent quotes:** Gemini and GPT copied every quote exactly; Mistral changed words in 1 in 10
+  (e.g. "uncertainty" to "uncertainties") and quoted a hospital name. Checked by SQL (`SOFT_QUOTE`), no AI.
+- **Double counting:** solved before the AI: every count comes from `SERVICE_SV` (`COUNT(DISTINCT COMMENT_ID)`), and
+  no writer wrote a count.
+- **Main faithfulness error:** frequency words. Most unsupported claims say "many" for a point only a few comments make.
+
+**Recommendation:** counts from the semantic view, text from Gemini 3.1 Pro (complete and stable structure, exact
+quotes), and a check after writing that every expected section is there (`SERVICE_EXPECTED`); GPT-5.4 is the most
+faithful but needs that check, as it skips sections. Credits for this phase are not yet in the usage history.
+
 ## Snowflake objects
 
 | Kind | Name | Purpose |
@@ -309,6 +368,12 @@ panel (precision, recall, F1, exact match, sentiment and impact agreement). **St
 | Table | `FRESH_COMMENTS` | Step 10a: 100 comments from the 20% of people kept aside |
 | View | `AUDIT_ROWS`, `AUDIT_SCORES` | Step 10b: the person's blind answers vs the panel's key |
 | Stage | `DATA_STAGE` | Uploaded data, prompts, scripts and app files |
+| Table | `SERVICE_COMMENTS`, `SERVICE_ANSWERS`, `SERVICE_TAGS` | Aggregation: the Forensic comments, one row per comment, one row per comment x sub-theme |
+| Semantic view | `SERVICE_SV` | Every count and % in the service report (each comment once per theme) |
+| View | `SERVICE_DOCUMENT`, `SERVICE_EXPECTED`, `SERVICE_LINES` | The SQL-built document, the sections a complete report needs, the comments per section |
+| Procedure | `RUN_SERVICE_REPORT(writer, repeat)` | One report by one writer into `SERVICE_REPORTS` |
+| Table / view | `SERVICE_REPORTS`, `SERVICE_JUDGE`, `SERVICE_CONSISTENCY`, `SERVICE_SCORES` | The 9 reports and their scores |
+| Function | `SOFT_QUOTE` | Quote matching that ignores quote marks and end punctuation |
 
 Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (grid runs), `DEMO_WH` (app).
 
@@ -330,6 +395,9 @@ Warehouses: `VOC_EVAL_PANEL` (panel runs), `VOC_EVAL_C01`..`VOC_EVAL_C08` (grid 
 | `sql/fresh.sql` | Step 10a: builds `FRESH_COMMENTS` |
 | `sql/audit.sql` | Step 10b: queues the blind-audit items and creates `AUDIT_ROWS`, `AUDIT_SCORES` |
 | `app/streamlit_app.py`, `app/environment.yml` | The `ANSWER_REVIEW` app |
+| `sql/service.sql`, `sql/service_tags.sql` | Aggregation R1-R3: the service's comments, the tables, `SERVICE_SV` and the document |
+| `sql/service_reports.sql`, `prompts/service_report_v1.txt` | R4: `RUN_SERVICE_REPORT` and the report instruction |
+| `sql/service_scores.sql`, `prompts/service_judge_v1.txt`, `prompts/service_consistency_v1.txt` | R5: scores and the two judge instructions |
 
 ## Rebuild from scratch
 
